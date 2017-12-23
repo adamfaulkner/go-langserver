@@ -16,6 +16,22 @@ import (
 
 type diagnostics map[string][]*lsp.Diagnostic // map of URI to diagnostics (for PublishDiagnosticParams)
 
+func (h *LangHandler) publishAdamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, diags diagnostics) error {
+	for filename, diags := range diags {
+		params := lsp.PublishDiagnosticsParams{
+			URI:         pathToURI(filename),
+			Diagnostics: make([]lsp.Diagnostic, len(diags)),
+		}
+		for i, d := range diags {
+			params.Diagnostics[i] = *d
+		}
+		if err := conn.Notify(ctx, "textDocument/publishDiagnostics", params); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // publishDiagnostics sends diagnostic information (such as compile
 // errors) to the client.
 func (h *LangHandler) publishDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, diags diagnostics) error {

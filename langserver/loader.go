@@ -6,20 +6,102 @@ import (
 	"go/ast"
 	"go/build"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"go/types"
+	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/sourcegraph/go-langserver/gotype"
 
 	"github.com/sourcegraph/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 
 	"golang.org/x/tools/go/loader"
 )
+
+// Typecheck the document referred to by fileURI. Send diagnostics as appropriate.
+func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI) {
+
+	if !isFileURI(fileURI) {
+		log.Println("Invalid File URI:", fileURI)
+	}
+	origFilename := h.FilePath(fileURI)
+
+	// Gotta get this file and write it to a temp.
+	contents, err := h.readFile(ctx, fileURI)
+	if err != nil {
+		log.Println("can't read file", fileURI, err)
+		return
+	}
+
+	tmpfile, err := ioutil.TempFile("", "")
+	if err != nil {
+		log.Println("Can't make temp file", err)
+		return
+	}
+	defer tmpfile.Close()
+	defer os.Remove(tmpfile.Name())
+
+	_, err = tmpfile.Write(contents)
+	if err != nil {
+		log.Println("Can't write temp file", err)
+		return
+	}
+
+	errs, err := gotype.CheckFile(origFilename, tmpfile.Name())
+	if err != nil {
+		log.Println("Can't check files", err)
+	}
+
+	diags := make(diagnostics)
+	for _, err := range errs {
+		var p token.Position
+		var msg string
+		switch e := err.(type) {
+		case types.Error:
+			p = e.Fset.Position(e.Pos)
+			msg = e.Msg
+		case scanner.Error:
+			p = e.Pos
+			msg = e.Msg
+		default:
+			log.Printf("Unknown error type %T", err)
+			return
+		}
+		diag := &lsp.Diagnostic{
+			Range: lsp.Range{
+				Start: lsp.Position{
+					Line:      p.Line - 1,
+					Character: p.Column - 1,
+				},
+				// TODO: Fix
+				End: lsp.Position{
+					Line:      p.Line,
+					Character: p.Column,
+				},
+			},
+			Severity: lsp.Error,
+			Source:   "go",
+			Message:  strings.TrimSpace(msg),
+		}
+		filename := p.Filename
+		if filename == tmpfile.Name() {
+			filename = origFilename
+		}
+
+		diags[filename] = append(diags[filename], diag)
+	}
+
+	if err := h.publishAdamfDiagnostics(ctx, conn, diags); err != nil {
+		log.Printf("warning: failed to send diagnostics: %s.", err)
+	}
+}
 
 func (h *LangHandler) typecheck(ctx context.Context, conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI, position lsp.Position) (*token.FileSet, *ast.Ident, []ast.Node, *loader.Program, *loader.PackageInfo, *token.Pos, error) {
 	parentSpan := opentracing.SpanFromContext(ctx)
