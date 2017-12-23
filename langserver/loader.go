@@ -14,7 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/pprof"
 	"strings"
+	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/sourcegraph/go-langserver/gotype"
@@ -27,6 +29,25 @@ import (
 
 // Typecheck the document referred to by fileURI. Send diagnostics as appropriate.
 func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI) {
+	profileFile, err := os.Create("/tmp/profile.pprof")
+	start := time.Now()
+	if err != nil {
+		log.Println("error making profile", err)
+		return
+	}
+	/*err = pprof.StartCPUProfile(profileFile)
+	if err != nil {
+		log.Println("could not start cpu profile", err)
+	} else {
+	*/
+	defer func() {
+		log.Println("Total time", time.Since(start))
+		err := pprof.WriteHeapProfile(profileFile)
+		if err != nil {
+			log.Println("error writing heap profile", err)
+		}
+	}()
+	//}
 
 	if !isFileURI(fileURI) {
 		log.Println("Invalid File URI:", fileURI)
@@ -54,10 +75,12 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 		return
 	}
 
-	errs, err := gotype.CheckFile(origFilename, tmpfile.Name())
-	if err != nil {
-		log.Println("Can't check files", err)
-	}
+	bctx := h.BuildContext(ctx)
+	// cgo is not supported.
+	bctx.CgoEnabled = false
+	errs := gotype.CheckFile(origFilename, bctx)
+
+	log.Println("Hi", errs)
 
 	diags := make(diagnostics)
 	for _, err := range errs {
@@ -67,7 +90,7 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 		case types.Error:
 			p = e.Fset.Position(e.Pos)
 			msg = e.Msg
-		case scanner.Error:
+		case *scanner.Error:
 			p = e.Pos
 			msg = e.Msg
 		default:
