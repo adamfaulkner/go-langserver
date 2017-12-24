@@ -58,9 +58,17 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	bctx.CgoEnabled = false
 	errs := gotype.CheckFile(origFilename, bctx)
 
-	log.Println("Hi", errs)
-
 	diags := make(diagnostics)
+
+	// Make sure that origFilename is represented to cover the case where the
+	// final error was just fixed in this file.
+	//
+	// TODO(adamf): This doesn't really cover all cases where there was
+	// previously an error. For example, we can fix other packages to now
+	// successfully compile. It would be better to integrate this with the
+	// caching/state tracking mechanism.
+	diags[origFilename] = nil
+
 	for _, err := range errs {
 		var p token.Position
 		var msg string
