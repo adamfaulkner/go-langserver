@@ -115,12 +115,12 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		}
 	}()
 
-	// TODO(adamf): Figure out why this call is needed.
 	// collect package files
 	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
 	if err != nil {
 		return nil, err // err may be *build.NoGoError - return as is
 	}
+
 	var filenames []string
 	filenames = append(filenames, bp.GoFiles...)
 	filenames = append(filenames, bp.CgoFiles...)

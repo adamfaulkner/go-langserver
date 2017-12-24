@@ -48,16 +48,22 @@ func (h *LangHandler) BuildContext(ctx context.Context) *build.Context {
 		fi, err := fs.Stat(ctx, path)
 		return err == nil && fi.Mode().IsDir()
 	}
-	bctx.HasSubdir = func(root, dir string) (rel string, ok bool) {
-		if !bctx.IsDir(dir) {
-			return "", false
+	// TODO(adamf): See if this was actually providing value somewhere.
+	/*
+		// HasSubDir is supposed to return false if dir is not a subdir of root.
+		// This always returns true and a relative path potentially containing
+		// ".." elements.
+		bctx.HasSubdir = func(root, dir string) (rel string, ok bool) {
+			if !bctx.IsDir(dir) {
+				return "", false
+			}
+			rel, err := filepath.Rel(root, dir)
+			if err != nil {
+				return "", false
+			}
+			return rel, true
 		}
-		rel, err := filepath.Rel(root, dir)
-		if err != nil {
-			return "", false
-		}
-		return rel, true
-	}
+	*/
 	bctx.ReadDir = func(path string) ([]os.FileInfo, error) {
 		return fs.ReadDir(ctx, path)
 	}
