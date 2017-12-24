@@ -85,20 +85,38 @@ func CheckFile(origFilename string, bctx *build.Context) []error {
 	}
 
 	// Get the file we want.
-	src, err := bctx.OpenFile(origFilename)
+	bp, err := bctx.Import(importPath, "", 0)
 	if err != nil {
-		log.Println("Error reading file", err)
+		log.Println("Error reading package", err)
 		return []error{err}
 	}
 
-	parsedFile, err := parser.ParseFile(fset, origFilename, src, 0)
-	if err != nil {
-		log.Println("Error parsing file", err)
-		return []error{err}
+	testPackage := strings.HasSuffix(origFilename, "_test.go")
+	var relativePaths []string
+	if testPackage {
+		relativePaths = bp.TestGoFiles
+	} else {
+		relativePaths = bp.GoFiles
+	}
+
+	parsedFiles := make([]*ast.File, len(relativePaths))
+	for i, relativePath := range relativePaths {
+		absPath := filepath.Join(bp.Dir, relativePath)
+		src, err := bctx.OpenFile(absPath)
+		if err != nil {
+			log.Println("Error opening file", err)
+			return []error{err}
+		}
+		parsedFiles[i], err = parser.ParseFile(fset, absPath, src, 0)
+		src.Close()
+		if err != nil {
+			log.Println("Error parsing file", err)
+			return []error{err}
+		}
 	}
 
 	log.Println("Checking", importPath)
-	_, err = typeConf.Check(importPath, fset, []*ast.File{parsedFile}, nil)
+	_, err = typeConf.Check(importPath, fset, parsedFiles, nil)
 	if err != nil {
 		retErrs = append(retErrs, err)
 	}
