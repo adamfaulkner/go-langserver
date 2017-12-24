@@ -88,7 +88,8 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	}
 
 	// no need to re-import if the package was imported completely before
-	pkg := p.packages[bp.ImportPath]
+	origImportPath := bp.ImportPath
+	pkg := p.packages[origImportPath]
 	if pkg != nil {
 		if pkg == &importing {
 			return nil, fmt.Errorf("import cycle through package %q", bp.ImportPath)
@@ -103,17 +104,18 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		return pkg, nil
 	}
 
-	p.packages[bp.ImportPath] = &importing
+	p.packages[origImportPath] = &importing
 	defer func() {
 		// clean up in case of error
 		// TODO(gri) Eventually we may want to leave a (possibly empty)
 		// package in the map in all cases (and use that package to
 		// identify cycles). See also issue 16088.
-		if p.packages[bp.ImportPath] == &importing {
-			p.packages[bp.ImportPath] = nil
+		if p.packages[origImportPath] == &importing {
+			p.packages[origImportPath] = nil
 		}
 	}()
 
+	// TODO(adamf): Figure out why this call is needed.
 	// collect package files
 	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
 	if err != nil {
@@ -158,7 +160,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		panic("package is not safe yet no error was returned")
 	}
 
-	p.packages[bp.ImportPath] = pkg
+	p.packages[origImportPath] = pkg
 	return pkg, nil
 }
 
