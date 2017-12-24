@@ -9,7 +9,6 @@ import (
 	"go/scanner"
 	"go/token"
 	"go/types"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -54,27 +53,6 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	}
 	origFilename := h.FilePath(fileURI)
 
-	// Gotta get this file and write it to a temp.
-	contents, err := h.readFile(ctx, fileURI)
-	if err != nil {
-		log.Println("can't read file", fileURI, err)
-		return
-	}
-
-	tmpfile, err := ioutil.TempFile("", "")
-	if err != nil {
-		log.Println("Can't make temp file", err)
-		return
-	}
-	defer tmpfile.Close()
-	defer os.Remove(tmpfile.Name())
-
-	_, err = tmpfile.Write(contents)
-	if err != nil {
-		log.Println("Can't write temp file", err)
-		return
-	}
-
 	bctx := h.BuildContext(ctx)
 	// cgo is not supported.
 	bctx.CgoEnabled = false
@@ -113,12 +91,7 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 			Source:   "go",
 			Message:  strings.TrimSpace(msg),
 		}
-		filename := p.Filename
-		if filename == tmpfile.Name() {
-			filename = origFilename
-		}
-
-		diags[filename] = append(diags[filename], diag)
+		diags[p.Filename] = append(diags[p.Filename], diag)
 	}
 
 	if err := h.publishAdamfDiagnostics(ctx, conn, diags); err != nil {

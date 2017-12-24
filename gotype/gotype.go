@@ -78,6 +78,8 @@ func CheckFile(origFilename string, bctx *build.Context) []error {
 
 		// Changed because I want to use the srcimporter with go 1.8
 		Importer: New(bctx, fset, make(map[string]*types.Package)),
+		// In Go 1.9, we can just do something like this.
+		//Importer: importer.Lookup("source", "")
 		// Changed to work with go 1.8
 		Sizes: &types.StdSizes{8, 8},
 	}
