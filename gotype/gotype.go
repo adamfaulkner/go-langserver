@@ -1,6 +1,7 @@
 package gotype
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -55,7 +56,7 @@ func filenameToImportPath(filename string, bctx *build.Context) (string, error) 
 	return importPath, nil
 }
 
-func CheckFile(origFilename string, bctx *build.Context) []error {
+func CheckFile(origFilename string, bctx *build.Context, ctx context.Context) []error {
 	fset := token.NewFileSet()
 	importPath, err := filenameToImportPath(origFilename, bctx)
 	if err != nil {
@@ -77,7 +78,7 @@ func CheckFile(origFilename string, bctx *build.Context) []error {
 		},
 
 		// Changed because I want to use the srcimporter with go 1.8
-		Importer: New(bctx, fset, make(map[string]*types.Package)),
+		Importer: New(bctx, fset, make(map[string]*types.Package), ctx),
 		// In Go 1.9, we can just do something like this.
 		//Importer: importer.Lookup("source", "")
 		// Changed to work with go 1.8
@@ -101,6 +102,11 @@ func CheckFile(origFilename string, bctx *build.Context) []error {
 
 	parsedFiles := make([]*ast.File, len(relativePaths))
 	for i, relativePath := range relativePaths {
+		// Parsing is an expensive operation, check if the context has expired.
+		if ctx.Err() != nil {
+			return []error{ctx.Err()}
+		}
+
 		absPath := filepath.Join(bp.Dir, relativePath)
 		src, err := bctx.OpenFile(absPath)
 		if err != nil {

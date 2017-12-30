@@ -26,8 +26,30 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
+// TODO(adamf): This synchronization mechanism is dreadful.
+func (h *LangHandler) adamfGetContextForPath(path string) context.Context {
+	h.adamfMutex.Lock()
+	defer h.adamfMutex.Unlock()
+
+	existingCancel, ok := h.adamfTypecheckCancels[path]
+	if ok {
+		existingCancel()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	h.adamfTypecheckCancels[path] = cancel
+	return ctx
+}
+
+// TODO(adamf): Split this into several functions. Diagnostics should be
+// happening asynchronously and should not have a context.
 // Typecheck the document referred to by fileURI. Send diagnostics as appropriate.
 func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI) {
+	if !isFileURI(fileURI) {
+		log.Println("Invalid File URI:", fileURI)
+	}
+	origFilename := h.FilePath(fileURI)
+
 	profileFile, err := os.Create("/tmp/profile.pprof")
 	start := time.Now()
 	if err != nil {
@@ -48,15 +70,12 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	}()
 	//}
 
-	if !isFileURI(fileURI) {
-		log.Println("Invalid File URI:", fileURI)
-	}
-	origFilename := h.FilePath(fileURI)
+	realCtx := h.adamfGetContextForPath(origFilename)
 
-	bctx := h.BuildContext(ctx)
+	bctx := h.BuildContext(realCtx)
 	// cgo is not supported.
 	bctx.CgoEnabled = false
-	errs := gotype.CheckFile(origFilename, bctx)
+	errs := gotype.CheckFile(origFilename, bctx, realCtx)
 
 	diags := make(diagnostics)
 
@@ -102,7 +121,13 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 		diags[p.Filename] = append(diags[p.Filename], diag)
 	}
 
-	if err := h.publishAdamfDiagnostics(ctx, conn, diags); err != nil {
+	// Do not send diagnostics if our context has since expired.
+	if realCtx.Err() != nil {
+		log.Println("Context expired")
+		return
+	}
+
+	if err := h.publishAdamfDiagnostics(realCtx, conn, diags); err != nil {
 		log.Printf("warning: failed to send diagnostics: %s.", err)
 	}
 }

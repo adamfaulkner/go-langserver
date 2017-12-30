@@ -7,6 +7,7 @@
 package gotype
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/build"
@@ -23,6 +24,8 @@ type Importer struct {
 	fset     *token.FileSet
 	sizes    types.Sizes
 	packages map[string]*types.Package
+
+	ctx context.Context
 }
 
 // NewImporter returns a new Importer for the given context, file set, and map
@@ -31,13 +34,14 @@ type Importer struct {
 // non-nil file system functions, they are used instead of the regular package
 // os functions. The file set is used to track position information of package
 // files; and imported packages are added to the packages map.
-func New(ctxt *build.Context, fset *token.FileSet, packages map[string]*types.Package) *Importer {
+func New(ctxt *build.Context, fset *token.FileSet, packages map[string]*types.Package, ctx context.Context) *Importer {
 	return &Importer{
 		ctxt: ctxt,
 		fset: fset,
 		// Changed to work in go 1.8.
 		sizes:    &types.StdSizes{8, 8},
 		packages: packages,
+		ctx:      ctx,
 	}
 }
 
@@ -57,6 +61,11 @@ func (p *Importer) Import(path string) (*types.Package, error) {
 // Packages that are not comprised entirely of pure Go files may fail to import because the
 // type checker may not be able to determine all exported entities (e.g. due to cgo dependencies).
 func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*types.Package, error) {
+	// Do not do anything if context has expired.
+	if p.ctx.Err() != nil {
+		return nil, p.ctx.Err()
+	}
+
 	if mode != 0 {
 		panic("non-zero import mode")
 	}

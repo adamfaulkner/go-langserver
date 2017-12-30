@@ -23,7 +23,8 @@ import (
 // NewHandler creates a Go language server handler.
 func NewHandler() jsonrpc2.Handler {
 	return lspHandler{jsonrpc2.HandlerWithError((&LangHandler{
-		HandlerShared: &HandlerShared{},
+		HandlerShared:         &HandlerShared{},
+		adamfTypecheckCancels: make(map[string]func()),
 	}).handle)}
 }
 
@@ -68,6 +69,10 @@ type LangHandler struct {
 	importGraph     importgraph.Graph
 
 	cancel *cancel
+
+	adamfMutex sync.Mutex
+	// Each time a file is modified.
+	currentTypecheckContext context.Context
 }
 
 // reset clears all internal state in h.
