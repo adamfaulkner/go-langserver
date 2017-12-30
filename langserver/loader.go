@@ -26,19 +26,16 @@ import (
 	"golang.org/x/tools/go/loader"
 )
 
-// TODO(adamf): This synchronization mechanism is dreadful.
-func (h *LangHandler) adamfGetContextForPath(path string) context.Context {
+// Cancel any ongoing operations, create a new context, return it.
+func (h *LangHandler) updateContext() context.Context {
 	h.adamfMutex.Lock()
-	defer h.adamfMutex.Unlock()
-
-	existingCancel, ok := h.adamfTypecheckCancels[path]
-	if ok {
-		existingCancel()
+	if h.cancelOngoingOperations != nil {
+		h.cancelOngoingOperations()
 	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	h.adamfTypecheckCancels[path] = cancel
-	return ctx
+	realCtx, cancel := context.WithCancel(context.Background())
+	h.cancelOngoingOperations = cancel
+	h.adamfMutex.Unlock()
+	return realCtx
 }
 
 // TODO(adamf): Split this into several functions. Diagnostics should be
@@ -70,8 +67,7 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	}()
 	//}
 
-	realCtx := h.adamfGetContextForPath(origFilename)
-
+	realCtx := h.updateContext()
 	bctx := h.BuildContext(realCtx)
 	// cgo is not supported.
 	bctx.CgoEnabled = false
