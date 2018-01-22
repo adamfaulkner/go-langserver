@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/build"
 	"go/parser"
-	"go/scanner"
 	"go/token"
 	"go/types"
 	"log"
@@ -73,7 +72,11 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	bctx.CgoEnabled = false
 	errs := gotype.CheckFile(origFilename, bctx, realCtx)
 
-	diags := make(diagnostics)
+	diags, err := errsToDiagnostics(errs)
+	if err != nil {
+		log.Println("Error converting err to diagnostic", err)
+		return
+	}
 
 	// Make sure that origFilename is represented to cover the case where the
 	// final error was just fixed in this file.
@@ -82,39 +85,8 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	// previously an error. For example, we can fix other packages to now
 	// successfully compile. It would be better to integrate this with the
 	// caching/state tracking mechanism.
-	diags[origFilename] = nil
-
-	for _, err := range errs {
-		var p token.Position
-		var msg string
-		switch e := err.(type) {
-		case types.Error:
-			p = e.Fset.Position(e.Pos)
-			msg = e.Msg
-		case *scanner.Error:
-			p = e.Pos
-			msg = e.Msg
-		default:
-			log.Printf("Unknown error type %T", err)
-			return
-		}
-		diag := &lsp.Diagnostic{
-			Range: lsp.Range{
-				Start: lsp.Position{
-					Line:      p.Line - 1,
-					Character: p.Column - 1,
-				},
-				// TODO: Fix
-				End: lsp.Position{
-					Line:      p.Line,
-					Character: p.Column,
-				},
-			},
-			Severity: lsp.Error,
-			Source:   "go",
-			Message:  strings.TrimSpace(msg),
-		}
-		diags[p.Filename] = append(diags[p.Filename], diag)
+	if _, ok := diags[origFilename]; !ok {
+		diags[origFilename] = nil
 	}
 
 	// Do not send diagnostics if our context has since expired.
@@ -382,7 +354,7 @@ func typecheck(ctx context.Context, fset *token.FileSet, bctx *build.Context, bp
 	if err != nil && prog == nil {
 		return nil, nil, err
 	}
-	diags, err := errsToDiagnostics(typeErrs, prog)
+	diags, err := errsToDiagnostics(typeErrs)
 	if err != nil {
 		return nil, nil, err
 	}

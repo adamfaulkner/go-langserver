@@ -81,6 +81,7 @@ func (h *LangHandler) reset(init *InitializeParams) error {
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
 	if err := h.HandlerCommon.Reset(init.Root()); err != nil {
 		return err
 	}

@@ -262,7 +262,7 @@ func (h *LangHandler) workspaceRefsTypecheck(ctx context.Context, bctx *build.Co
 	}
 
 	// Publish typechecking error diagnostics.
-	diags, err := errsToDiagnostics(typeErrs, prog)
+	diags, err := errsToDiagnostics(typeErrs)
 	if err != nil {
 		return nil, err
 	}

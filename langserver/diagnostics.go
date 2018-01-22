@@ -8,8 +8,6 @@ import (
 	"go/types"
 	"strings"
 
-	"golang.org/x/tools/go/loader"
-
 	"github.com/sourcegraph/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
@@ -59,21 +57,16 @@ func (h *LangHandler) publishDiagnostics(ctx context.Context, conn jsonrpc2.JSON
 	return nil
 }
 
-func errsToDiagnostics(typeErrs []error, prog *loader.Program) (diagnostics, error) {
-	var diags diagnostics
+func errsToDiagnostics(typeErrs []error) (diagnostics, error) {
+	diags := diagnostics{}
 	for _, typeErr := range typeErrs {
 		var (
-			p    token.Position
-			pEnd token.Position
-			msg  string
+			p   token.Position
+			msg string
 		)
 		switch e := typeErr.(type) {
 		case types.Error:
 			p = e.Fset.Position(e.Pos)
-			_, path, _ := prog.PathEnclosingInterval(e.Pos, e.Pos)
-			if len(path) > 0 {
-				pEnd = e.Fset.Position(path[0].End())
-			}
 			msg = e.Msg
 		case scanner.Error:
 			p = e.Pos
@@ -92,10 +85,7 @@ func errsToDiagnostics(typeErrs []error, prog *loader.Program) (diagnostics, err
 		}
 		// LSP is 0-indexed, so subtract one from the numbers Go reports.
 		start := lsp.Position{Line: p.Line - 1, Character: p.Column - 1}
-		end := lsp.Position{Line: pEnd.Line - 1, Character: pEnd.Column - 1}
-		if !pEnd.IsValid() {
-			end = start
-		}
+		end := lsp.Position{Line: p.Line, Character: p.Column}
 		diag := &lsp.Diagnostic{
 			Range: lsp.Range{
 				Start: start,
