@@ -7,7 +7,7 @@ import (
 	"go/token"
 	"go/types"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 

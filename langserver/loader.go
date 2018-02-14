@@ -17,9 +17,9 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/sourcegraph/go-langserver/gotype"
+	"github.com/adamfaulkner/go-langserver/gotype"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 
 	"golang.org/x/tools/go/loader"

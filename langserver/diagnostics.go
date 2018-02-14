@@ -8,7 +8,7 @@ import (
 	"go/types"
 	"strings"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -36,7 +36,7 @@ func (h *LangHandler) publishDiagnostics(ctx context.Context, conn jsonrpc2.JSON
 	// Our diagnostics are currently disabled because they behave
 	// incorrectly. We do not keep track of which files have failed /
 	// succeeded, so we do not send empty diagnostics to clear compiler
-	// errors/etc. https://github.com/sourcegraph/go-langserver/issues/23
+	// errors/etc. https://github.com/adamfaulkner/go-langserver/issues/23
 	// Leaving the code here for when we do actually fix this.
 	if cake := false; !cake {
 		return nil

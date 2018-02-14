@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 )
 
 func PathHasPrefix(s, prefix string) bool {

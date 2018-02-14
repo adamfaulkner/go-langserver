@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/sourcegraph/go-langserver/pkg/lspext"
+	"github.com/adamfaulkner/go-langserver/pkg/lspext"
 	"github.com/sourcegraph/jsonrpc2"
 )
 

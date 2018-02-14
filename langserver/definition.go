@@ -10,9 +10,9 @@ import (
 	"log"
 	"path/filepath"
 
-	"github.com/sourcegraph/go-langserver/langserver/internal/godef"
-	"github.com/sourcegraph/go-langserver/langserver/internal/refs"
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/langserver/internal/godef"
+	"github.com/adamfaulkner/go-langserver/langserver/internal/refs"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 

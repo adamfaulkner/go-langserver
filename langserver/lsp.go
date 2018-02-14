@@ -1,8 +1,8 @@
 package langserver
 
 import (
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
-	"github.com/sourcegraph/go-langserver/pkg/lspext"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lspext"
 )
 
 // This file contains lspext but redefined to suit go-langserver

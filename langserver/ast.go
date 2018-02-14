@@ -5,7 +5,7 @@ import (
 	"go/ast"
 	"go/token"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 )
 
 func offsetForPosition(contents []byte, p lsp.Position) (offset int, valid bool, whyInvalid string) {

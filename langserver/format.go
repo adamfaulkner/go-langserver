@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/tools/go/buildutil"
 
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 

@@ -14,7 +14,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/sourcegraph/ctxvfs"
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
 )
 

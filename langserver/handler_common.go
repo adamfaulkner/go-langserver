@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/sourcegraph/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 )
 
 // HandlerCommon contains functionality that both the build and lang
