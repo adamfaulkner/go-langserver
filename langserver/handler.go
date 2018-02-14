@@ -206,7 +206,9 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 			}()
 		}
 
-		kind := lsp.TDSKIncremental
+		// TODO(adamf): vscode is sending us garbage when using incremental.
+		// kind := lsp.TDSKIncremental
+		kind := lsp.TDSKFull
 		return lsp.InitializeResult{
 			Capabilities: lsp.ServerCapabilities{
 				TextDocumentSync: lsp.TextDocumentSyncOptionsOrKind{
@@ -356,15 +358,6 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 				h.resetCaches(true)
 			}
 			if uri != "" {
-				// NOTE(adamf): Do not understand.
-				// a user is viewing this path, hint to add it to the cache
-				// (unless we're primarily using binary package cache .a
-				// files).
-				/*
-					if !UseBinaryPkgCache {
-						go h.typecheck(ctx, conn, uri, lsp.Position{})
-					}
-				*/
 				go h.adamfDiagnostics(ctx, conn, uri)
 			}
 			return nil, err

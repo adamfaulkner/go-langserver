@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/adamfaulkner/go-langserver/gotype"
+	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/sourcegraph/jsonrpc2"
@@ -52,11 +52,6 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 		log.Println("error making profile", err)
 		return
 	}
-	/*err = pprof.StartCPUProfile(profileFile)
-	if err != nil {
-		log.Println("could not start cpu profile", err)
-	} else {
-	*/
 	defer func() {
 		log.Println("Total time", time.Since(start))
 		err := pprof.WriteHeapProfile(profileFile)
@@ -64,7 +59,6 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 			log.Println("error writing heap profile", err)
 		}
 	}()
-	//}
 
 	realCtx := h.updateContext()
 	bctx := h.BuildContext(realCtx)
