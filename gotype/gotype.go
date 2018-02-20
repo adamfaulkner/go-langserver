@@ -65,8 +65,9 @@ func CheckFile(origFilename string, bctx *build.Context, ctx context.Context) []
 
 	var retErrs []error
 
-	if bctx.CgoEnabled == true {
-		log.Println("bctx.CgoEnabled = true, failing to typecheck.")
+	// Cgo must be enabled for FakeImportC to work.
+	if bctx.CgoEnabled == false {
+		log.Println("bctx.CgoEnabled = false, failing to typecheck.")
 		return nil
 	}
 
