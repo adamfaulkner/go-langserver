@@ -20,9 +20,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sourcegraph/ctxvfs"
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 	"github.com/adamfaulkner/go-langserver/pkg/lspext"
+	"github.com/sourcegraph/ctxvfs"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -144,7 +144,7 @@ func TestServer(t *testing.T) {
 					// "a.go:1:28": "(T).F string", // TODO(sqs): see golang/hover.go; this is the output we want
 					"a.go:1:28": "struct field F string",
 					"a.go:1:17": `type T struct; struct {
-    F string
+	F string
 }`,
 				},
 				wantSymbols: map[string][]string{
@@ -803,7 +803,7 @@ var (
 //
 // How to
 //
-// 	Example Code!
+//	Example Code!
 //
 package pkg2
 
@@ -882,16 +882,16 @@ type Header struct {
 				"a.go": `package p
 
 				// Comments for A
-				func A(foo int, bar func(baz int) int) int { 
-					return bar(foo) 
+				func A(foo int, bar func(baz int) int) int {
+					return bar(foo)
 				}
 
-				
+
 				func B() {}
 
 				// Comments for C
-				func C(x int, y int) int { 
-					return x+y 
+				func C(x int, y int) int {
+					return x+y
 				}`,
 				"b.go": "package p; func main() { B(); A(); A(0,); A(0); C(1,2) }",
 			},
