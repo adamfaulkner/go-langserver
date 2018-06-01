@@ -355,26 +355,6 @@ func typecheck(ctx context.Context, fset *token.FileSet, bctx *build.Context, bp
 	return prog, diags, nil
 }
 
-func clearInfoFields(info *loader.PackageInfo) {
-	// TODO(adonovan): opt: save memory by eliminating unneeded scopes/objects.
-	// (Requires go/types change for Go 1.7.)
-	//   info.Pkg.Scope().ClearChildren()
-
-	// Discard the file ASTs and their accumulated type
-	// information to save memory.
-	info.Files = nil
-	info.Defs = make(map[*ast.Ident]types.Object)
-	info.Uses = make(map[*ast.Ident]types.Object)
-	info.Implicits = make(map[ast.Node]types.Object)
-
-	// Also, disable future collection of wholly unneeded
-	// type information for the package in case there is
-	// more type-checking to do (augmentation).
-	info.Types = nil
-	info.Scopes = nil
-	info.Selections = nil
-}
-
 func isMultiplePackageError(err error) bool {
 	_, ok := err.(*build.MultiplePackageError)
 	return ok

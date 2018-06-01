@@ -2,8 +2,6 @@ package langserver
 
 import (
 	"fmt"
-	"go/ast"
-	"go/token"
 
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 )
@@ -33,36 +31,4 @@ func offsetForPosition(contents []byte, p lsp.Position) (offset int, valid bool,
 		return 0, false, fmt.Sprintf("character %d is beyond first line boundary", p.Character)
 	}
 	return 0, false, fmt.Sprintf("file only has %d lines", line+1)
-}
-
-func rangeForNode(fset *token.FileSet, node ast.Node) lsp.Range {
-	start := fset.Position(node.Pos())
-	end := fset.Position(node.End()) // node.End is exclusive, and so is the LSP spec
-	return lsp.Range{
-		Start: lsp.Position{Line: start.Line - 1, Character: start.Column - 1},
-		End:   lsp.Position{Line: end.Line - 1, Character: end.Column - 1},
-	}
-}
-
-type fakeNode struct{ p, e token.Pos }
-
-func (n fakeNode) Pos() token.Pos { return n.p }
-func (n fakeNode) End() token.Pos { return n.e }
-
-func goRangesToLSPLocations(fset *token.FileSet, nodes []*ast.Ident) []lsp.Location {
-	locs := make([]lsp.Location, len(nodes))
-	for i, node := range nodes {
-		locs[i] = goRangeToLSPLocation(fset, node.Pos(), node.End())
-	}
-	return locs
-}
-
-// goRangeToLSPLocation converts a token.Pos range into a lsp.Location. end is
-// exclusive.
-func goRangeToLSPLocation(fset *token.FileSet, pos token.Pos, end token.Pos) lsp.Location {
-	return lsp.Location{
-		URI:   pathToURI(fset.Position(pos).Filename),
-		Range: rangeForNode(fset, fakeNode{p: pos, e: end}),
-	}
-
 }

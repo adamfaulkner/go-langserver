@@ -6,9 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"sync"
-	"time"
 
 	"golang.org/x/tools/refactor/importgraph"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
-	"github.com/adamfaulkner/go-langserver/pkg/lspext"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -194,18 +191,6 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 			return nil, err
 		}
 
-		// PERF: Kick off a workspace/symbol in the background to warm up the server
-		if yes, _ := strconv.ParseBool(envWarmupOnInitialize); yes {
-			go func() {
-				ctx, cancel := context.WithDeadline(ctx, time.Now().Add(30*time.Second))
-				defer cancel()
-				_, _ = h.handleWorkspaceSymbol(ctx, conn, req, lspext.WorkspaceSymbolParams{
-					Query: "",
-					Limit: 100,
-				})
-			}()
-		}
-
 		// TODO(adamf): vscode is sending us garbage when using incremental.
 		// kind := lsp.TDSKIncremental
 		kind := lsp.TDSKFull
@@ -214,16 +199,6 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 				TextDocumentSync: lsp.TextDocumentSyncOptionsOrKind{
 					Kind: &kind,
 				},
-				DefinitionProvider:           true,
-				DocumentFormattingProvider:   true,
-				DocumentSymbolProvider:       true,
-				HoverProvider:                true,
-				ReferencesProvider:           true,
-				WorkspaceSymbolProvider:      true,
-				XWorkspaceReferencesProvider: true,
-				XDefinitionProvider:          true,
-				XWorkspaceSymbolByProperties: true,
-				SignatureHelpProvider:        &lsp.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
 			},
 		}, nil
 
@@ -259,96 +234,6 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 			IsString: params.ID.IsString,
 		})
 		return nil, nil
-
-	case "textDocument/hover":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.TextDocumentPositionParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleHover(ctx, conn, req, params)
-
-	case "textDocument/definition":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.TextDocumentPositionParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleDefinition(ctx, conn, req, params)
-
-	case "textDocument/xdefinition":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.TextDocumentPositionParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleXDefinition(ctx, conn, req, params)
-
-	case "textDocument/references":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.ReferenceParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleTextDocumentReferences(ctx, conn, req, params)
-
-	case "textDocument/documentSymbol":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.DocumentSymbolParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleTextDocumentSymbol(ctx, conn, req, params)
-
-	case "textDocument/signatureHelp":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.TextDocumentPositionParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleTextDocumentSignatureHelp(ctx, conn, req, params)
-
-	case "textDocument/formatting":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lsp.DocumentFormattingParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleTextDocumentFormatting(ctx, conn, req, params)
-
-	case "workspace/symbol":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lspext.WorkspaceSymbolParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleWorkspaceSymbol(ctx, conn, req, params)
-
-	case "workspace/xreferences":
-		if req.Params == nil {
-			return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeInvalidParams}
-		}
-		var params lspext.WorkspaceReferencesParams
-		if err := json.Unmarshal(*req.Params, &params); err != nil {
-			return nil, err
-		}
-		return h.handleWorkspaceReferences(ctx, conn, req, params)
 
 	default:
 		if isFileSystemRequest(req.Method) {
