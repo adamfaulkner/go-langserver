@@ -8,8 +8,6 @@ import (
 	"log"
 	"sync"
 
-	"golang.org/x/tools/refactor/importgraph"
-
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 
@@ -55,15 +53,6 @@ type LangHandler struct {
 	*HandlerShared
 	init *InitializeParams // set by "initialize" request
 
-	typecheckCache cache
-	symbolCache    cache
-
-	// cache the reverse import graph. The sync.Once is a pointer since it
-	// is reset when we reset caches. If it was a value we would racily
-	// updated the internal mutex when assigning a new sync.Once.
-	importGraphOnce *sync.Once
-	importGraph     importgraph.Graph
-
 	cancel *cancel
 
 	adamfMutex              sync.Mutex
@@ -91,33 +80,7 @@ func (h *LangHandler) reset(init *InitializeParams) error {
 	}
 	h.init = init
 	h.cancel = &cancel{}
-	h.resetCaches(false)
 	return nil
-}
-
-func (h *LangHandler) resetCaches(lock bool) {
-	if lock {
-		h.mu.Lock()
-	}
-
-	h.importGraphOnce = &sync.Once{}
-	h.importGraph = nil
-
-	if h.typecheckCache == nil {
-		h.typecheckCache = newTypecheckCache()
-	} else {
-		h.typecheckCache.Purge()
-	}
-
-	if h.symbolCache == nil {
-		h.symbolCache = newSymbolCache()
-	} else {
-		h.symbolCache.Purge()
-	}
-
-	if lock {
-		h.mu.Unlock()
-	}
 }
 
 // handle implements jsonrpc2.Handler.
@@ -237,11 +200,7 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 
 	default:
 		if isFileSystemRequest(req.Method) {
-			uri, fileChanged, err := h.handleFileSystemRequest(ctx, req)
-			if fileChanged {
-				// a file changed, so we must re-typecheck and re-enumerate symbols
-				h.resetCaches(true)
-			}
+			uri, _, err := h.handleFileSystemRequest(ctx, req)
 			if uri != "" {
 				go h.adamfDiagnostics(ctx, conn, uri)
 			}
