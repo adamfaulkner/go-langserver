@@ -56,7 +56,9 @@ func filenameToImportPath(filename string, bctx *build.Context) (string, error) 
 	return importPath, nil
 }
 
-func CheckFile(origFilename string, bctx *build.Context, ctx context.Context) []error {
+// Check a file. Context is used for cancellation, build context is used for
+// all the filesystem related operations.
+func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []error {
 	fset := token.NewFileSet()
 	importPath, err := filenameToImportPath(origFilename, bctx)
 	if err != nil {
@@ -79,7 +81,7 @@ func CheckFile(origFilename string, bctx *build.Context, ctx context.Context) []
 		},
 
 		// Changed because I want to use the srcimporter with go 1.8
-		Importer: New(bctx, fset, make(map[string]*types.Package), ctx),
+		Importer: New(ctx, bctx, fset, make(map[string]*types.Package)),
 		// In Go 1.9, we can just do something like this.
 		//Importer: importer.Lookup("source", "")
 		// Changed to work with go 1.8

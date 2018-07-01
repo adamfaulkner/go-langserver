@@ -52,7 +52,7 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	bctx := h.BuildContext(realCtx)
 	// cgo is not supported.
 	bctx.CgoEnabled = true
-	errs := gotype.CheckFile(origFilename, bctx, realCtx)
+	errs := gotype.CheckFile(realCtx, origFilename, bctx)
 
 	diags, err := errsToDiagnostics(errs)
 	if err != nil {
