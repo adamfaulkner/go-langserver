@@ -97,12 +97,10 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 
 	testPackage := strings.HasSuffix(origFilename, "_test.go")
 	var relativePaths []string
+	relativePaths = append(relativePaths, bp.GoFiles...)
 	if testPackage {
-		relativePaths = bp.TestGoFiles
-	} else {
-		relativePaths = bp.GoFiles
+		relativePaths = append(relativePaths, bp.TestGoFiles...)
 	}
-
 	parsedFiles := make([]*ast.File, len(relativePaths))
 	for i, relativePath := range relativePaths {
 		// Parsing is an expensive operation, check if the context has expired.
