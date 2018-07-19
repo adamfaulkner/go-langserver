@@ -18,6 +18,7 @@ func (h *LangHandler) updateContext() context.Context {
 		h.cancelOngoingOperations()
 	}
 	realCtx, cancel := context.WithCancel(context.Background())
+	h.currentCtx = realCtx
 	h.cancelOngoingOperations = cancel
 	h.mu.Unlock()
 	return realCtx

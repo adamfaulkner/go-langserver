@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"sync"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
+	"github.com/adamfaulkner/go-langserver/suggestions"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -53,6 +55,7 @@ type LangHandler struct {
 	*HandlerShared
 	init *InitializeParams // set by "initialize" request
 
+	currentCtx              context.Context
 	cancel                  *cancel
 	cancelOngoingOperations func()
 }
@@ -168,11 +171,7 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 		}, nil
 
 	case "textDocument/completion":
-		// TODO(adamf): more legit contexting, more legit error handling
-		return CompletionRequest(
-			context.TODO(),
-			req,
-			h)
+		return h.handleCompletionRequest(req)
 
 	case "initialized":
 		// A notification that the client is ready to receive requests. Ignore
@@ -218,4 +217,39 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 
 		return nil, &jsonrpc2.Error{Code: jsonrpc2.CodeMethodNotFound, Message: fmt.Sprintf("method not supported: %s", req.Method)}
 	}
+}
+
+func (h *LangHandler) handleCompletionRequest(req *jsonrpc2.Request) (result interface{}, err error) {
+
+	if req.Method != "textDocument/completion" {
+		return nil, errors.New("Wrong method for completion request")
+	}
+
+	position := lsp.TextDocumentPositionParams{}
+	err = json.Unmarshal(*req.Params, &position)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx := h.currentCtx
+
+	filename := h.FilePath(position.TextDocument.URI)
+
+	file, err := h.FS.Open(ctx, filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	contents, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, ok, errMsg := OffsetForPosition(contents, position.Position)
+	if !ok {
+		return nil, errors.New(errMsg)
+	}
+
+	return suggestions.CompletionRequest(ctx, filename, contents, cursor)
 }
