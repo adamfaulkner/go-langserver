@@ -3,8 +3,6 @@ package langserver
 import (
 	"context"
 	"log"
-	"os"
-	"runtime/pprof"
 	"time"
 
 	"github.com/adamfaulkner/go-langserver/gotype"
@@ -34,18 +32,9 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 	}
 	origFilename := h.FilePath(fileURI)
 
-	profileFile, err := os.Create("/tmp/profile.pprof")
 	start := time.Now()
-	if err != nil {
-		log.Println("error making profile", err)
-		return
-	}
 	defer func() {
 		log.Println("Total time", time.Since(start))
-		err := pprof.WriteHeapProfile(profileFile)
-		if err != nil {
-			log.Println("error writing heap profile", err)
-		}
 	}()
 
 	realCtx := h.updateContext()
@@ -77,7 +66,7 @@ func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRP
 		return
 	}
 
-	if err := h.publishAdamfDiagnostics(realCtx, conn, diags); err != nil {
+	if err := h.publishDiagnostics(realCtx, conn, diags); err != nil {
 		log.Printf("warning: failed to send diagnostics: %s.", err)
 	}
 }

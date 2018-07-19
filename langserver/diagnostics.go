@@ -14,34 +14,7 @@ import (
 
 type diagnostics map[string][]*lsp.Diagnostic // map of URI to diagnostics (for PublishDiagnosticParams)
 
-func (h *LangHandler) publishAdamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, diags diagnostics) error {
-	for filename, diags := range diags {
-		params := lsp.PublishDiagnosticsParams{
-			URI:         pathToURI(filename),
-			Diagnostics: make([]lsp.Diagnostic, len(diags)),
-		}
-		for i, d := range diags {
-			params.Diagnostics[i] = *d
-		}
-		if err := conn.Notify(ctx, "textDocument/publishDiagnostics", params); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// publishDiagnostics sends diagnostic information (such as compile
-// errors) to the client.
 func (h *LangHandler) publishDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, diags diagnostics) error {
-	// Our diagnostics are currently disabled because they behave
-	// incorrectly. We do not keep track of which files have failed /
-	// succeeded, so we do not send empty diagnostics to clear compiler
-	// errors/etc. https://github.com/adamfaulkner/go-langserver/issues/23
-	// Leaving the code here for when we do actually fix this.
-	if cake := false; !cake {
-		return nil
-	}
-
 	for filename, diags := range diags {
 		params := lsp.PublishDiagnosticsParams{
 			URI:         pathToURI(filename),
