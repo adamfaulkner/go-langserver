@@ -15,6 +15,7 @@ import (
 	"go/token"
 	"go/types"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -24,6 +25,18 @@ type Importer struct {
 	fset     *token.FileSet
 	sizes    types.Sizes
 	packages map[string]*types.Package
+
+	// The set of relevant packages for typechecking. This should include
+	// everything that has been part of a top level identifier's type, but
+	// nothing that was only included in a function body. For example, if a
+	// function returns "time.Time", "time" should be included in this set. If
+	// function calls time.Now internally, it should not necessarily be
+	// included in this set if IgnoreFuncBodies is set.
+	//
+	// Now, because of the interfaces we have, if we try to check something
+	// that's not in this set when IgnoreFuncBodies is set, we return an empty
+	// package.
+	relevantPkgs map[string]struct{}
 
 	ctx context.Context
 }
@@ -54,6 +67,14 @@ func (p *Importer) Import(path string) (*types.Package, error) {
 	return p.ImportFrom(path, "", 0)
 }
 
+func newEmptyPackage(path string) *types.Package {
+	nameIdx := strings.LastIndex(path, "/")
+	name := path[nameIdx+1:]
+	pkg := types.NewPackage(path, name)
+	pkg.MarkComplete()
+	return pkg
+}
+
 // ImportFrom imports the package with the given import path resolved from the given srcDir,
 // adds the new package to the set of packages maintained by the importer, and returns the
 // package. Package path resolution and file system operations are controlled by the context
@@ -64,6 +85,21 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	// Do not do anything if context has expired.
 	if p.ctx.Err() != nil {
 		return nil, p.ctx.Err()
+	}
+
+	// Initialization of relevantPkgs. If this is the first thing to be
+	// imported, IgnoreFuncBodies is not set.
+	if p.relevantPkgs == nil {
+		p.relevantPkgs = map[string]struct{}{
+			path: struct{}{},
+		}
+	} else {
+		// IgnoreFuncBodies must be set, so if path is not in relevantPkgs, it
+		// should be ignored.
+		if _, ok := p.relevantPkgs[path]; !ok {
+			return newEmptyPackage(path), nil
+		}
+
 	}
 
 	if mode != 0 {
