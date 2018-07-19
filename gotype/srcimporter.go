@@ -34,7 +34,7 @@ type Importer struct {
 // non-nil file system functions, they are used instead of the regular package
 // os functions. The file set is used to track position information of package
 // files; and imported packages are added to the packages map.
-func New(ctx context.Context, ctxt *build.Context, fset *token.FileSet, packages map[string]*types.Package) *Importer {
+func NewSourceImporter(ctx context.Context, ctxt *build.Context, fset *token.FileSet, packages map[string]*types.Package) *Importer {
 	return &Importer{
 		ctxt: ctxt,
 		fset: fset,

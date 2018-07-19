@@ -6,7 +6,7 @@ import (
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
 )
 
-func offsetForPosition(contents []byte, p lsp.Position) (offset int, valid bool, whyInvalid string) {
+func OffsetForPosition(contents []byte, p lsp.Position) (offset int, valid bool, whyInvalid string) {
 	line := 0
 	col := 0
 	// TODO(sqs): count chars, not bytes, per LSP. does that mean we

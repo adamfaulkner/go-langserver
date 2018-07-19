@@ -15,6 +15,8 @@ import (
 	"strings"
 )
 
+// If argument is of type scanner.ErrorList, return a slice of all errors.
+// Otherwise return a slice containing error.
 func expandErrors(err error) []error {
 	list, ok := err.(scanner.ErrorList)
 	if !ok {
@@ -27,7 +29,11 @@ func expandErrors(err error) []error {
 	return result
 }
 
+// Given a filename, figure out what its import path should be.
 func filenameToImportPath(filename string, bctx *build.Context) (string, error) {
+
+	// TODO(adamf): This can be checked once. It's not necessary to check every
+	// time.
 	gopaths := filepath.SplitList(bctx.GOPATH) // list will be empty with no GOPATH
 	for _, gopath := range gopaths {
 		if !filepath.IsAbs(gopath) {
@@ -44,6 +50,9 @@ func filenameToImportPath(filename string, bctx *build.Context) (string, error) 
 		srcDir = bctx.GOROOT // if workspace is Go stdlib
 	} else {
 		srcDir = "" // with no GOPATH, only stdlib will work
+
+		// TODO(adamf): This could also be optimized. Assuming the common case
+		// is a very short GOPATH, it's probably not worthwhile.
 		for _, gopath := range gopaths {
 			if strings.HasPrefix(pkgDir, gopath) {
 				srcDir = gopath
@@ -79,13 +88,7 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		Error: func(err error) {
 			retErrs = append(retErrs, expandErrors(err)...)
 		},
-
-		// Changed because I want to use the srcimporter with go 1.8
-		Importer: New(ctx, bctx, fset, make(map[string]*types.Package)),
-		// In Go 1.9, we can just do something like this.
-		//Importer: importer.Lookup("source", "")
-		// Changed to work with go 1.8
-		Sizes: &types.StdSizes{8, 8},
+		Importer: NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package)),
 	}
 
 	// Get the file we want.

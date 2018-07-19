@@ -13,8 +13,8 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/sourcegraph/ctxvfs"
 	"github.com/adamfaulkner/go-langserver/pkg/lsp"
+	"github.com/sourcegraph/ctxvfs"
 	"github.com/sourcegraph/jsonrpc2"
 )
 
@@ -127,7 +127,7 @@ func (h *overlay) didChange(params *lsp.DidChangeTextDocumentParams) error {
 			contents = []byte(change.Text) // new full content
 			continue
 		}
-		start, ok, why := offsetForPosition(contents, change.Range.Start)
+		start, ok, why := OffsetForPosition(contents, change.Range.Start)
 		if !ok {
 			return fmt.Errorf("received textDocument/didChange for invalid position %q on %q: %s", change.Range.Start, params.TextDocument.URI, why)
 		}
@@ -136,7 +136,7 @@ func (h *overlay) didChange(params *lsp.DidChangeTextDocumentParams) error {
 			end = start + int(change.RangeLength) - 1
 		} else {
 			// RangeLength not specified, work it out from Range.End
-			end, ok, why = offsetForPosition(contents, change.Range.End)
+			end, ok, why = OffsetForPosition(contents, change.Range.End)
 			if !ok {
 				return fmt.Errorf("received textDocument/didChange for invalid position %q on %q: %s", change.Range.Start, params.TextDocument.URI, why)
 			}
