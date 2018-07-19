@@ -117,16 +117,109 @@ func processFieldList(fl *ast.FieldList, packageNames map[string]struct{}) {
 func processExpr(e ast.Expr, packageNames map[string]struct{}) {
 	// TODO: Rest of this.
 	switch eT := e.(type) {
+	case *ast.BadExpr:
+		// Unclear what I can do with this.
+		return
+
+	// Simple stuff:
+	case *ast.Ident:
+		packageNames[eT.Name] = struct{}{}
+
+	case *ast.Ellipsis:
+		if eT.Elt != nil {
+			processExpr(eT.Elt, packageNames)
+		}
+
+	case *ast.BasicLit:
+		// These are never relevant.
+		return
+
+	case *ast.FuncLit:
+		processFuncType(eT.Type, packageNames)
+
+	case *ast.CompositeLit:
+		processCompositeLit(eT, packageNames)
+
+	// Exprs:
+	case *ast.ParenExpr:
+		processExpr(eT.X, packageNames)
 
 	case *ast.SelectorExpr:
 		// Here's where something is actually being selected. We could be much
 		// more precise and only care about these.
 		processExpr(eT.X, packageNames)
-	case *ast.Ident:
-		packageNames[eT.Name] = struct{}{}
+
+	case *ast.IndexExpr:
+		// Should not happen.
+		processExpr(eT.X, packageNames)
+		processExpr(eT.Index, packageNames)
+
+	case *ast.SliceExpr:
+		// Should not happen.
+		// Actually it will happen.
+		log.Println("SliceExpr?")
+
+	case *ast.TypeAssertExpr:
+		// Should not happen.
+		// Actually it will happen.
+		log.Println("TypeAssertExpr?")
+
+	case *ast.CallExpr:
+		processCallExpr(eT, packageNames)
+
+	case *ast.StarExpr:
+		processExpr(eT.X, packageNames)
+
+	case *ast.UnaryExpr:
+		processExpr(eT.X, packageNames)
+
+	case *ast.BinaryExpr:
+		processExpr(eT.X, packageNames)
+		processExpr(eT.Y, packageNames)
+
+	case *ast.KeyValueExpr:
+		processExpr(eT.Key, packageNames)
+		processExpr(eT.Value, packageNames)
+
+		// Types:
+	case *ast.ArrayType:
+		processExpr(eT.Len, packageNames)
+		processExpr(eT.Elt, packageNames)
+
+	case *ast.StructType:
+		processFieldList(eT.Fields, packageNames)
+
+	case *ast.FuncType:
+		processFuncType(eT, packageNames)
+
+	case *ast.InterfaceType:
+		processFieldList(eT.Methods, packageNames)
+
+	case *ast.MapType:
+		processExpr(eT.Key, packageNames)
+		processExpr(eT.Value, packageNames)
+
+	case *ast.ChanType:
+		processExpr(eT.Value, packageNames)
 
 	default:
 		//log.Printf("%+v", e)
 	}
 
+}
+
+func processCompositeLit(cl *ast.CompositeLit, packageNames map[string]struct{}) {
+	if cl.Type != nil {
+		processExpr(cl.Type, packageNames)
+	}
+	for _, elt := range cl.Elts {
+		processExpr(elt, packageNames)
+	}
+}
+
+func processCallExpr(ce *ast.CallExpr, packageNames map[string]struct{}) {
+	processExpr(ce.Fun, packageNames)
+	for _, arg := range ce.Args {
+		processExpr(arg, packageNames)
+	}
 }
