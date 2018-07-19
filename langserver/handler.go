@@ -160,6 +160,10 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 				TextDocumentSync: lsp.TextDocumentSyncOptionsOrKind{
 					Kind: &kind,
 				},
+				CompletionProvider: &lsp.CompletionOptions{
+					ResolveProvider:   false,
+					TriggerCharacters: []string{"."},
+				},
 			},
 		}, nil
 

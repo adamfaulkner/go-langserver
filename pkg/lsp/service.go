@@ -201,7 +201,7 @@ type CompletionItem struct {
 	SortText      string      `json:"sortText,omitempty"`
 	FilterText    string      `json:"filterText,omitempty"`
 	InsertText    string      `json:"insertText,omitempty"`
-	TextEdit      TextEdit    `json:"textEdit,omitempty"`
+	TextEdit      *TextEdit   `json:"textEdit,omitempty"`
 	Data          interface{} `json:"data,omitempty"`
 }
 
