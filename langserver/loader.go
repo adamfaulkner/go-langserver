@@ -13,20 +13,18 @@ import (
 
 // Cancel any ongoing operations, create a new context, return it.
 func (h *LangHandler) updateContext() context.Context {
-	h.adamfMutex.Lock()
+	h.mu.Lock()
 	if h.cancelOngoingOperations != nil {
 		h.cancelOngoingOperations()
 	}
 	realCtx, cancel := context.WithCancel(context.Background())
 	h.cancelOngoingOperations = cancel
-	h.adamfMutex.Unlock()
+	h.mu.Unlock()
 	return realCtx
 }
 
-// TODO(adamf): Split this into several functions. Diagnostics should be
-// happening asynchronously and should not have a context.
 // Typecheck the document referred to by fileURI. Send diagnostics as appropriate.
-func (h *LangHandler) adamfDiagnostics(ctx context.Context, conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI) {
+func (h *LangHandler) checkAndReportDiagnostics(conn jsonrpc2.JSONRPC2, fileURI lsp.DocumentURI) {
 	if !isFileURI(fileURI) {
 		log.Println("Invalid File URI:", fileURI)
 	}

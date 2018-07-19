@@ -53,9 +53,7 @@ type LangHandler struct {
 	*HandlerShared
 	init *InitializeParams // set by "initialize" request
 
-	cancel *cancel
-
-	adamfMutex              sync.Mutex
+	cancel                  *cancel
 	cancelOngoingOperations func()
 }
 
@@ -202,7 +200,7 @@ func (h *LangHandler) Handle(ctx context.Context, conn jsonrpc2.JSONRPC2, req *j
 		if isFileSystemRequest(req.Method) {
 			uri, _, err := h.handleFileSystemRequest(ctx, req)
 			if uri != "" {
-				go h.adamfDiagnostics(ctx, conn, uri)
+				go h.checkAndReportDiagnostics(conn, uri)
 			}
 			return nil, err
 		}
