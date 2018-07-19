@@ -10,8 +10,10 @@ import (
 	"go/token"
 	"go/types"
 	"log"
+	"os"
 	"path"
 	"path/filepath"
+	"runtime/pprof"
 	"strings"
 )
 
@@ -68,6 +70,17 @@ func filenameToImportPath(filename string, bctx *build.Context) (string, error) 
 // Check a file. Context is used for cancellation, build context is used for
 // all the filesystem related operations.
 func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []error {
+	pprofF, err := os.Create("/tmp/pprof")
+	if err != nil {
+		panic(err)
+	}
+	defer pprofF.Close()
+	err = pprof.StartCPUProfile(pprofF)
+	if err != nil {
+		panic(err)
+	}
+	defer pprof.StopCPUProfile()
+
 	fset := token.NewFileSet()
 	importPath, err := filenameToImportPath(origFilename, bctx)
 	if err != nil {
