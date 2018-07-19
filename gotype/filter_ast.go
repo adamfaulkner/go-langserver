@@ -76,7 +76,14 @@ func processFuncDecl(decl *ast.FuncDecl, packageNames map[string]struct{}) {
 	if decl.Recv != nil {
 		processFieldList(decl.Recv, packageNames)
 	}
-	//processFuncType(decl.Type, packageNames)
+	processFuncType(decl.Type, packageNames)
+}
+
+func processFuncType(t *ast.FuncType, packageNames map[string]struct{}) {
+	processFieldList(t.Params, packageNames)
+	if t.Results != nil {
+		processFieldList(t.Results, packageNames)
+	}
 }
 
 func processFieldList(fl *ast.FieldList, packageNames map[string]struct{}) {
@@ -109,7 +116,7 @@ func processExpr(e ast.Expr, packageNames map[string]struct{}) {
 		packageNames[eT.Name] = struct{}{}
 
 	default:
-		log.Printf("%+v", e)
+		//log.Printf("%+v", e)
 	}
 
 }

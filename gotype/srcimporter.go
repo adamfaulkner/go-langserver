@@ -14,6 +14,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -61,6 +62,10 @@ func NewSourceImporter(ctx context.Context, ctxt *build.Context, fset *token.Fil
 // Importing is a sentinel taking the place in Importer.packages
 // for a package that is in the process of being imported.
 var importing types.Package
+
+// ErrPackage is a sentinal takeng the place in Importer.packages for a package
+// that cannot be imported due to typechecking errors.
+var errpackage types.Package
 
 // Import(path) is a shortcut for ImportFrom(path, "", 0).
 func (p *Importer) Import(path string) (*types.Package, error) {
@@ -134,19 +139,26 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	}
 
 	// no need to re-import if the package was imported completely before
+	log.Println("Before size", len(p.packages))
 	origImportPath := bp.ImportPath
 	pkg := p.packages[origImportPath]
 	if pkg != nil {
 		if pkg == &importing {
+			log.Println("bailing cycle")
 			return nil, fmt.Errorf("import cycle through package %q", bp.ImportPath)
+		}
+		if pkg == &errpackage {
+			return nil, fmt.Errorf("package previously failed to import, not retrying %q", bp.ImportPath)
 		}
 		if !pkg.Complete() {
 			// Package exists but is not complete - we cannot handle this
 			// at the moment since the source importer replaces the package
 			// wholesale rather than augmenting it (see #19337 for details).
 			// Return incomplete package with error (see #16088).
+			log.Println("bailing complete")
 			return pkg, fmt.Errorf("reimported partially imported package %q", bp.ImportPath)
 		}
+		log.Println("bailing success")
 		return pkg, nil
 	}
 
@@ -161,6 +173,8 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		}
 	}()
 
+	log.Println("size of packages:", len(p.packages))
+
 	// collect package files
 	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
 	if err != nil {
@@ -173,6 +187,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 
 	files, err := p.parseFiles(bp.Dir, filenames)
 	if err != nil {
+		log.Println("Error parsing:", err)
 		return nil, err
 	}
 
@@ -206,6 +221,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 			pkg = nil
 			err = firstHardErr // give preference to first hard error over any soft error
 		}
+		p.packages[origImportPath] = &errpackage
 		return pkg, fmt.Errorf("type-checking package %q failed (%v)", bp.ImportPath, err)
 	}
 	if firstHardErr != nil {
@@ -213,6 +229,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		panic("package is not safe yet no error was returned")
 	}
 
+	log.Println("Putting this package in:", pkg)
 	p.packages[origImportPath] = pkg
 	return pkg, nil
 }
