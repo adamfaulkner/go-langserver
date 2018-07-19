@@ -215,9 +215,7 @@ type Hover struct {
 	Range    *Range         `json:"range,omitempty"`
 }
 
-type MarkedString markedString
-
-type markedString struct {
+type MarkedString struct {
 	Language string `json:"language"`
 	Value    string `json:"value"`
 
@@ -235,16 +233,14 @@ func (m *MarkedString) UnmarshalJSON(data []byte) error {
 		m.isRawString = true
 		return nil
 	}
-	// Language string
-	ms := (*markedString)(m)
-	return json.Unmarshal(data, ms)
+	return json.Unmarshal(data, m)
 }
 
 func (m MarkedString) MarshalJSON() ([]byte, error) {
 	if m.isRawString {
 		return json.Marshal(m.Value)
 	}
-	return json.Marshal((markedString)(m))
+	return json.Marshal(m)
 }
 
 // RawMarkedString returns a MarkedString consisting of only a raw
