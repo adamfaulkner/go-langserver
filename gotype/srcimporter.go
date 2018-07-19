@@ -14,7 +14,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -185,7 +184,11 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	}
 
 	for _, file := range files {
-		imports := detectTopLevelRelevantImports(file)
+		imports, err := detectTopLevelRelevantImports(file, p.ctxt, bp.Dir)
+		if err != nil {
+			return nil, err
+		}
+
 		for _, path := range imports {
 			p.relevantPkgs[path] = struct{}{}
 		}
@@ -222,7 +225,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		panic("package is not safe yet no error was returned")
 	}
 
-	log.Println("Putting this package in:", pkg)
 	p.packages[origImportPath] = pkg
 	return pkg, nil
 }

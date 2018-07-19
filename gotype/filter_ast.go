@@ -2,6 +2,7 @@ package gotype
 
 import (
 	"go/ast"
+	"go/build"
 	"log"
 	"strings"
 )
@@ -16,7 +17,11 @@ func allRelevantImports(file *ast.File, packageNames map[string]struct{}) {
 
 // If we only need to typecheck top level declarations and not function
 // bodies, which imports do we need to recursively typecheck?
-func detectTopLevelRelevantImports(file *ast.File) []string {
+func detectTopLevelRelevantImports(
+	file *ast.File,
+	bctx *build.Context,
+	currentDir string,
+) ([]string, error) {
 
 	// Get the package names that are referenced by the top level declarations.
 	packageNames := map[string]struct{}{}
@@ -41,11 +46,25 @@ func detectTopLevelRelevantImports(file *ast.File) []string {
 	for _, imp := range file.Imports {
 		var impName string
 		path := strings.Trim(imp.Path.Value, "\"")
+
+		if path == "C" {
+			// We don't care about import C.
+			continue
+		}
+
 		if imp.Name != nil {
+			// Easy case -- if the import gave the package a name, then we can
+			// use it.
 			impName = imp.Name.Name
 		} else {
-			idx := strings.LastIndex(path, "/")
-			impName = path[idx+1:]
+			// Difficult case -- if the import did not give the package a name,
+			// we have to actually import the package (package statement only)
+			// to see what its name is.
+			var err error
+			impName, err = getPackageName(path, currentDir, bctx)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// We can't really help when using the dot import.
@@ -59,7 +78,7 @@ func detectTopLevelRelevantImports(file *ast.File) []string {
 		}
 	}
 
-	return relevantImports
+	return relevantImports, nil
 }
 
 // Get the package names that are referenced in a GenDecl.
