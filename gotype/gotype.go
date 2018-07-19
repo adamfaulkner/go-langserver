@@ -116,6 +116,14 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		}
 	}
 
+	relevantPkgs := map[string]struct{}{}
+	for _, file := range parsedFiles {
+		allRelevantImports(file, relevantPkgs)
+	}
+	imp := NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package))
+	imp.relevantPkgs = relevantPkgs
+	log.Println("relevantPkgs:", relevantPkgs)
+
 	log.Println("Checking", importPath)
 	// if checkPkgFiles is called multiple times, set up conf only once
 	typeConf := types.Config{
@@ -123,7 +131,7 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		Error: func(err error) {
 			retErrs = append(retErrs, expandErrors(err)...)
 		},
-		Importer: NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package)),
+		Importer: imp,
 	}
 
 	_, err = typeConf.Check(importPath, fset, parsedFiles, nil)
