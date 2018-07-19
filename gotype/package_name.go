@@ -1,63 +1,35 @@
 package gotype
 
-import (
-	"errors"
-	"go/build"
-	"go/parser"
-	"go/token"
-	"path/filepath"
-	"strings"
-)
+import "go/build"
+
+type pkgCacheKey struct {
+	importPath string
+	currentDir string
+}
 
 // Return a package name given the import path.
 func getPackageName(
 	importPath string,
 	currentDir string,
 	bctx *build.Context,
+	pkgCache map[pkgCacheKey]*build.Package,
 ) (packageName string, err error) {
 
-	// Parsing files is really really slow. To avoid this, use FindOnly to find
-	// the package, then use PackageClauseOnly to only parse the package line of a
-	// single file from this package.
-
-	pkg, err := bctx.Import(importPath, currentDir, build.FindOnly)
-	if err != nil {
-		return "", err
+	cacheKey := pkgCacheKey{
+		importPath: importPath,
+		currentDir: currentDir,
 	}
-	files, err := bctx.ReadDir(pkg.Dir)
-	if err != nil {
-		return "", err
+	if pkg, ok := pkgCache[cacheKey]; ok {
+		return pkg.Name, nil
 	}
 
-	var picked string
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-
-		if strings.HasSuffix(f.Name(), ".go") {
-			picked = f.Name()
-			break
-		}
-	}
-
-	if picked == "" {
-		return "", errors.New("Cannot find any go files in that package?")
-	}
-
-	var fullPath string
-	if bctx.JoinPath != nil {
-		fullPath = bctx.JoinPath(pkg.Dir, picked)
-	} else {
-		fullPath = filepath.Join(pkg.Dir, picked)
-	}
-
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, fullPath, nil, parser.PackageClauseOnly)
+	pkg, err := bctx.Import(importPath, currentDir, 0)
 	if err != nil {
 		return "", err
 	}
 
-	return f.Name.Name, nil
+	pkgCache[cacheKey] = pkg
+
+	return pkg.Name, nil
 
 }

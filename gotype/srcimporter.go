@@ -38,6 +38,8 @@ type Importer struct {
 	// package.
 	relevantPkgs map[string]struct{}
 
+	buildPkgCache map[pkgCacheKey]*build.Package
+
 	ctx context.Context
 }
 
@@ -52,9 +54,10 @@ func NewSourceImporter(ctx context.Context, ctxt *build.Context, fset *token.Fil
 		ctxt: ctxt,
 		fset: fset,
 		// Changed to work in go 1.8.
-		sizes:    &types.StdSizes{8, 8},
-		packages: packages,
-		ctx:      ctx,
+		sizes:         &types.StdSizes{8, 8},
+		packages:      packages,
+		ctx:           ctx,
+		buildPkgCache: make(map[pkgCacheKey]*build.Package),
 	}
 }
 
@@ -114,22 +117,32 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	// determine package path (do vendor resolution)
 	var bp *build.Package
 	var err error
-	switch {
-	default:
-		if abs, err := p.absPath(srcDir); err == nil { // see issue #14282
-			srcDir = abs
-		}
-		bp, err = p.ctxt.Import(path, srcDir, build.FindOnly)
 
-	case build.IsLocalImport(path):
-		// "./x" -> "srcDir/x"
-		bp, err = p.ctxt.ImportDir(filepath.Join(srcDir, path), build.FindOnly)
-
-	case p.isAbsPath(path):
-		return nil, fmt.Errorf("invalid absolute import path %q", path)
+	cacheKey := pkgCacheKey{
+		importPath: path,
+		currentDir: srcDir,
 	}
-	if err != nil {
-		return nil, err // err may be *build.NoGoError - return as is
+	var foundInCache bool
+	bp, foundInCache = p.buildPkgCache[cacheKey]
+
+	if !foundInCache {
+		switch {
+		default:
+			if abs, err := p.absPath(srcDir); err == nil { // see issue #14282
+				srcDir = abs
+			}
+			bp, err = p.ctxt.Import(path, srcDir, build.FindOnly)
+
+		case build.IsLocalImport(path):
+			// "./x" -> "srcDir/x"
+			bp, err = p.ctxt.ImportDir(filepath.Join(srcDir, path), build.FindOnly)
+
+		case p.isAbsPath(path):
+			return nil, fmt.Errorf("invalid absolute import path %q", path)
+		}
+		if err != nil {
+			return nil, err // err may be *build.NoGoError - return as is
+		}
 	}
 
 	// package unsafe is known to the type checker
@@ -168,10 +181,13 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		}
 	}()
 
-	// collect package files
-	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
-	if err != nil {
-		return nil, err // err may be *build.NoGoError - return as is
+	if !foundInCache {
+		// collect package files
+		bp, err = p.ctxt.ImportDir(bp.Dir, 0)
+		if err != nil {
+			return nil, err // err may be *build.NoGoError - return as is
+		}
+		p.buildPkgCache[cacheKey] = bp
 	}
 
 	var filenames []string
@@ -184,7 +200,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	}
 
 	for _, file := range files {
-		imports, err := detectTopLevelRelevantImports(file, p.ctxt, bp.Dir)
+		imports, err := detectTopLevelRelevantImports(file, p.ctxt, bp.Dir, p.buildPkgCache)
 		if err != nil {
 			return nil, err
 		}

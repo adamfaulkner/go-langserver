@@ -21,6 +21,7 @@ func detectTopLevelRelevantImports(
 	file *ast.File,
 	bctx *build.Context,
 	currentDir string,
+	buildPkgCache map[pkgCacheKey]*build.Package,
 ) ([]string, error) {
 
 	// Get the package names that are referenced by the top level declarations.
@@ -61,7 +62,7 @@ func detectTopLevelRelevantImports(
 			// we have to actually import the package (package statement only)
 			// to see what its name is.
 			var err error
-			impName, err = getPackageName(path, currentDir, bctx)
+			impName, err = getPackageName(path, currentDir, bctx, buildPkgCache)
 			if err != nil {
 				return nil, err
 			}
