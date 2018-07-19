@@ -17,7 +17,6 @@ func allRelevantImports(file *ast.File, packageNames map[string]struct{}) {
 // If we only need to typecheck top level declarations and not function
 // bodies, which imports do we need to recursively typecheck?
 func detectTopLevelRelevantImports(file *ast.File) []string {
-	log.Println("file", file.Name)
 
 	// Get the package names that are referenced by the top level declarations.
 	packageNames := map[string]struct{}{}
@@ -60,13 +59,31 @@ func detectTopLevelRelevantImports(file *ast.File) []string {
 		}
 	}
 
-	log.Println("Relevant Imports:", relevantImports)
-
 	return relevantImports
 }
 
 // Get the package names that are referenced in a GenDecl.
 func processGenDecl(decl *ast.GenDecl, packageNames map[string]struct{}) {
+	for _, spec := range decl.Specs {
+		switch specT := spec.(type) {
+		case *ast.ValueSpec:
+			processValueSpec(specT, packageNames)
+
+		case *ast.TypeSpec:
+			processExpr(specT.Type, packageNames)
+
+		default:
+			// Don't need to worry about import specs.
+		}
+
+	}
+}
+
+func processValueSpec(vs *ast.ValueSpec, packageNames map[string]struct{}) {
+	processExpr(vs.Type, packageNames)
+	for _, v := range vs.Values {
+		processExpr(v, packageNames)
+	}
 }
 
 // Get the package names that are referenced in a FuncDecl.
@@ -87,12 +104,6 @@ func processFuncType(t *ast.FuncType, packageNames map[string]struct{}) {
 }
 
 func processFieldList(fl *ast.FieldList, packageNames map[string]struct{}) {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println(err)
-
-		}
-	}()
 	for _, field := range fl.List {
 		if field == nil {
 			log.Println("nil field?")
@@ -108,7 +119,6 @@ func processExpr(e ast.Expr, packageNames map[string]struct{}) {
 	switch eT := e.(type) {
 
 	case *ast.SelectorExpr:
-		log.Println("SelectorExpr:", eT.X, eT.Sel)
 		// Here's where something is actually being selected. We could be much
 		// more precise and only care about these.
 		processExpr(eT.X, packageNames)
