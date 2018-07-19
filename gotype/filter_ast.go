@@ -34,8 +34,6 @@ func detectTopLevelRelevantImports(file *ast.File) []string {
 		}
 	}
 
-	log.Println("pkgnames", packageNames)
-
 	// Now that we have package names, process imports to figure out which
 	// import paths are relevant.
 
@@ -61,6 +59,8 @@ func detectTopLevelRelevantImports(file *ast.File) []string {
 			}
 		}
 	}
+
+	log.Println("Relevant Imports:", relevantImports)
 
 	return relevantImports
 }

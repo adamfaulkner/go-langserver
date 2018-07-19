@@ -139,12 +139,10 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	}
 
 	// no need to re-import if the package was imported completely before
-	log.Println("Before size", len(p.packages))
 	origImportPath := bp.ImportPath
 	pkg := p.packages[origImportPath]
 	if pkg != nil {
 		if pkg == &importing {
-			log.Println("bailing cycle")
 			return nil, fmt.Errorf("import cycle through package %q", bp.ImportPath)
 		}
 		if pkg == &errpackage {
@@ -155,10 +153,8 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 			// at the moment since the source importer replaces the package
 			// wholesale rather than augmenting it (see #19337 for details).
 			// Return incomplete package with error (see #16088).
-			log.Println("bailing complete")
 			return pkg, fmt.Errorf("reimported partially imported package %q", bp.ImportPath)
 		}
-		log.Println("bailing success")
 		return pkg, nil
 	}
 
@@ -173,8 +169,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		}
 	}()
 
-	log.Println("size of packages:", len(p.packages))
-
 	// collect package files
 	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
 	if err != nil {
@@ -187,7 +181,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 
 	files, err := p.parseFiles(bp.Dir, filenames)
 	if err != nil {
-		log.Println("Error parsing:", err)
 		return nil, err
 	}
 
