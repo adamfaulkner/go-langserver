@@ -91,6 +91,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	// imported, IgnoreFuncBodies is not set.
 	if p.relevantPkgs == nil {
 		p.relevantPkgs = map[string]struct{}{
+			// Not necessary but whatever.
 			path: struct{}{},
 		}
 	} else {
@@ -173,6 +174,13 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	files, err := p.parseFiles(bp.Dir, filenames)
 	if err != nil {
 		return nil, err
+	}
+
+	for _, file := range files {
+		imports := detectTopLevelRelevantImports(file)
+		for _, path := range imports {
+			p.relevantPkgs[path] = struct{}{}
+		}
 	}
 
 	// type-check package files

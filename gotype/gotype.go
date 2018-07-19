@@ -82,15 +82,6 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		return nil
 	}
 
-	// if checkPkgFiles is called multiple times, set up conf only once
-	typeConf := types.Config{
-		FakeImportC: true,
-		Error: func(err error) {
-			retErrs = append(retErrs, expandErrors(err)...)
-		},
-		Importer: NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package)),
-	}
-
 	// Get the file we want.
 	bp, err := bctx.Import(importPath, "", 0)
 	if err != nil {
@@ -126,6 +117,15 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 	}
 
 	log.Println("Checking", importPath)
+	// if checkPkgFiles is called multiple times, set up conf only once
+	typeConf := types.Config{
+		FakeImportC: true,
+		Error: func(err error) {
+			retErrs = append(retErrs, expandErrors(err)...)
+		},
+		Importer: NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package)),
+	}
+
 	_, err = typeConf.Check(importPath, fset, parsedFiles, nil)
 	if err != nil {
 		retErrs = append(retErrs, err)
