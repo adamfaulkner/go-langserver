@@ -250,6 +250,7 @@ func (h *LangHandler) handleCompletionRequest(req *jsonrpc2.Request) (result int
 	if !ok {
 		return nil, errors.New(errMsg)
 	}
+	bctx := h.BuildContext(ctx)
 
-	return suggestions.CompletionRequest(ctx, filename, contents, cursor)
+	return suggestions.CompletionRequest(ctx, bctx, filename, contents, cursor)
 }
