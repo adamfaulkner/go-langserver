@@ -5,6 +5,7 @@ import (
 	"go/build"
 	"log"
 	"strings"
+	"sync"
 )
 
 // Add all importPaths from file to packageNames.
@@ -21,7 +22,7 @@ func detectTopLevelRelevantImports(
 	file *ast.File,
 	bctx *build.Context,
 	currentDir string,
-	buildPkgCache map[pkgCacheKey]*build.Package,
+	buildPkgCache *sync.Map,
 ) ([]string, error) {
 
 	// Get the package names that are referenced by the top level declarations.

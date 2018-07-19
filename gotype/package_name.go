@@ -1,6 +1,9 @@
 package gotype
 
-import "go/build"
+import (
+	"go/build"
+	"sync"
+)
 
 type pkgCacheKey struct {
 	importPath string
@@ -12,15 +15,16 @@ func getPackageName(
 	importPath string,
 	currentDir string,
 	bctx *build.Context,
-	pkgCache map[pkgCacheKey]*build.Package,
+	pkgCache *sync.Map,
 ) (packageName string, err error) {
 
 	cacheKey := pkgCacheKey{
 		importPath: importPath,
 		currentDir: currentDir,
 	}
-	if pkg, ok := pkgCache[cacheKey]; ok {
-		return pkg.Name, nil
+	pkgI, ok := pkgCache.Load(cacheKey)
+	if ok {
+		return pkgI.(*build.Package).Name, nil
 	}
 
 	pkg, err := bctx.Import(importPath, currentDir, 0)
@@ -28,7 +32,7 @@ func getPackageName(
 		return "", err
 	}
 
-	pkgCache[cacheKey] = pkg
+	pkgCache.Store(cacheKey, pkg)
 
 	return pkg.Name, nil
 

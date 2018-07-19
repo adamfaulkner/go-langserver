@@ -38,7 +38,7 @@ type Importer struct {
 	// package.
 	relevantPkgs map[string]struct{}
 
-	buildPkgCache map[pkgCacheKey]*build.Package
+	buildPkgCache *sync.Map
 
 	ctx context.Context
 }
@@ -57,7 +57,7 @@ func NewSourceImporter(ctx context.Context, ctxt *build.Context, fset *token.Fil
 		sizes:         &types.StdSizes{8, 8},
 		packages:      packages,
 		ctx:           ctx,
-		buildPkgCache: make(map[pkgCacheKey]*build.Package),
+		buildPkgCache: &sync.Map{},
 	}
 }
 
@@ -94,22 +94,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		return nil, p.ctx.Err()
 	}
 
-	// Initialization of relevantPkgs. If this is the first thing to be
-	// imported, IgnoreFuncBodies is not set.
-	if p.relevantPkgs == nil {
-		p.relevantPkgs = map[string]struct{}{
-			// Not necessary but whatever.
-			path: struct{}{},
-		}
-	} else {
-		// IgnoreFuncBodies must be set, so if path is not in relevantPkgs, it
-		// should be ignored.
-		if _, ok := p.relevantPkgs[path]; !ok {
-			return newEmptyPackage(path), nil
-		}
-
-	}
-
 	if mode != 0 {
 		panic("non-zero import mode")
 	}
@@ -123,7 +107,11 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		currentDir: srcDir,
 	}
 	var foundInCache bool
-	bp, foundInCache = p.buildPkgCache[cacheKey]
+	var bpI interface{}
+	bpI, foundInCache = p.buildPkgCache.Load(cacheKey)
+	if foundInCache {
+		bp = bpI.(*build.Package)
+	}
 
 	if !foundInCache {
 		switch {
@@ -187,7 +175,7 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		if err != nil {
 			return nil, err // err may be *build.NoGoError - return as is
 		}
-		p.buildPkgCache[cacheKey] = bp
+		p.buildPkgCache.Store(cacheKey, bp)
 	}
 
 	var filenames []string
@@ -199,13 +187,24 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		return nil, err
 	}
 
-	for _, file := range files {
-		imports, err := detectTopLevelRelevantImports(file, p.ctxt, bp.Dir, p.buildPkgCache)
-		if err != nil {
+	importsPerFile := make([][]string, len(files))
+	errorPerFile := make([]error, len(files))
+
+	detectWG := sync.WaitGroup{}
+	detectWG.Add(len(files))
+	for i, file := range files {
+		go func(file *ast.File) {
+			importsPerFile[i], errorPerFile[i] = detectTopLevelRelevantImports(file, p.ctxt, bp.Dir, p.buildPkgCache)
+			detectWG.Done()
+		}(file)
+
+	}
+	detectWG.Wait()
+	for i, paths := range importsPerFile {
+		if errorPerFile[i] != nil {
 			return nil, err
 		}
-
-		for _, path := range imports {
+		for _, path := range paths {
 			p.relevantPkgs[path] = struct{}{}
 		}
 	}
