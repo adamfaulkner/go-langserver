@@ -8,6 +8,16 @@ import (
 	"sync"
 )
 
+type identFilter struct {
+	all         bool
+	identifiers map[string]struct{}
+}
+
+type importTraversal struct {
+	importFilter map[string]identFilter
+	declFilter   map[string]identFilter
+}
+
 // Add all importPaths from file to packageNames.
 func allRelevantImports(file *ast.File, packageNames map[string]struct{}) {
 	for _, imp := range file.Imports {
