@@ -1,11 +1,9 @@
 package gotype
 
 import (
+	"errors"
 	"go/ast"
-	"go/build"
-	"log"
-	"strings"
-	"sync"
+	"go/token"
 )
 
 type identFilter struct {
@@ -13,12 +11,289 @@ type identFilter struct {
 	identifiers map[string]struct{}
 }
 
+func (i *identFilter) checkIdent(ident string) bool {
+	if i.all {
+		return true
+	}
+	_, ok := i.identifiers[ident]
+	return ok
+}
+
+// TODO(adamf): Switch all of this to dirs in order to handle vendor.
+/*
 type importTraversal struct {
+	bctx *build.Context
+
+	// Map from import path to identFilter used for imports.
 	importFilter map[string]identFilter
-	declFilter   map[string]identFilter
+	// Map from import path to identFilter used for decls.
+	declFilter map[string]identFilter
+
+	// TODO(adamf): Maybe a better data structure here would be better.
+	// Import paths that need reprocessing.
+	queue []string
+
+	// map from path to cached AST.
+	astCache map[string]*ast.File
+	// Fileset for the above ASTs.
+	fset *token.FileSet
+}
+
+func (i *importTraversal) parseFile(path string) (*ast.File, error) {
+	file, ok := i.astCache[path]
+	if ok {
+		return file, nil
+	}
+
+	var err error
+
+	if i.bctx.OpenFile != nil {
+		src, err := i.bctx.OpenFile(path)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(adamf): Need a parse cache.
+		file, err = parser.ParseFile(i.fset, path, src, 0)
+		src.Close() // ignore Close error - parsing may have succeeded which is all we need
+	} else {
+		// Special-case when ctxt doesn't provide a custom OpenFile and use the
+		// parser's file reading mechanism directly. This appears to be quite a
+		// bit faster than opening the file and providing an io.ReaderCloser in
+		// both cases.
+		// TODO(gri) investigate performance difference (issue #19281)
+		file, err = parser.ParseFile(i.fset, path, nil, 0)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	i.astCache[path] = file
+	return file, nil
+
+}
+
+func (i *importTraversal) computeClosure() error {
+	// Loop invariant: All packages are either
+	// 1. In queue.
+	// 2. Fully specified in importFilter and declFilter. Fully specified means
+	// that there's no entries in declFilter that cannot be typechecked because
+	// of missing entries for this package.
+
+	for len(i.queue) > 0 {
+		next := i.queue[0]
+		i.queue = i.queue[1:]
+
+	}
+}
+
+// TODO: Remove the allocations inherent in these return types.
+
+func (i *importTraversal) extractSelectorsFromDecl(decl ast.Decl) []ast.SelectorExpr {
+	// TODO
+	return nil
+}
+
+func (i *importTraversal) getEdgesFromPackage(pkg string) ([]ast.SelectorExpr, error) {
+	pkgDeclFilter, ok := i.declFilter[pkg]
+	if !ok {
+		return nil, errors.New("getEdgesFromPackage without declFilter for package.")
+	}
+
+	p, err := i.bctx.Import(pkg, "", 0)
+	if err != nil {
+		return nil, err
+	}
+
+	dir := p.Dir
+	var edges []ast.SelectorExpr
+
+	var allFilenames []string
+	allFilenames = append(allFilenames, p.GoFiles...)
+	// TODO: test mode
+	allFilenames = append(allFilenames, p.TestGoFiles...)
+
+	for _, fileName := range allFilenames {
+		path := filepath.Join(dir, fileName)
+		file, err := i.parseFile(path)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, decl := range file.Decls {
+		}
+
+	}
+}
+*/
+
+type selectorWalker struct {
+	// Contains the list of remaining decls to look at. These still need to be filtered with identFilter.
+	declList []ast.Decl
+	// When current decl is a GenDecl, this refers to the next spec to look at. These still need to be filtered with identFilter
+	specList []ast.Spec
+	// Contains the list of reminaing exprs to look at. These do not need to be filtered with identFilter by their nature.
+	exprList []ast.Expr
+	// Contains a filter to use for identifiers.
+	idf identFilter
+}
+
+func NewSelectorWalker(f *ast.File, idf identFilter) *selectorWalker {
+	return &selectorWalker{
+		declList: f.Decls,
+		idf:      idf,
+	}
+
+}
+
+var selectorWalkerFinished = errors.New("Finished walking")
+
+func (s *selectorWalker) NextSelector() (ast.SelectorExpr, error) {
+	if len(s.exprList) > 0 {
+		return s.processExprList()
+	}
+
+	if len(s.specList) > 0 {
+		return s.processSpecList()
+	}
+
+	if len(s.declList) > 0 {
+		return s.processDeclList()
+	}
+
+	return ast.SelectorExpr{}, selectorWalkerFinished
+}
+
+// Append types to exprList from a field list.
+func (s *selectorWalker) appendFieldList(fl *ast.FieldList) {
+	for _, f := range fl.List {
+		s.exprList = append(s.exprList, f.Type)
+	}
+}
+
+func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
+	nextExpr := s.exprList[0]
+	s.exprList = s.exprList[1:]
+
+	switch neT := nextExpr.(type) {
+	case *ast.SelectorExpr:
+		// Finally! Base case.
+		return *neT, nil
+
+	case *ast.BadExpr:
+		return ast.SelectorExpr{}, errors.New("BadExpr!")
+	case *ast.Ident:
+		// skip
+	case *ast.Ellipsis:
+		s.exprList = append(s.exprList, neT.Elt)
+	case *ast.BasicLit:
+		// skip
+	case *ast.FuncLit:
+		s.exprList = append(s.exprList, neT.Type)
+	case *ast.CompositeLit:
+		s.exprList = append(s.exprList, neT.Type)
+		s.exprList = append(s.exprList, neT.Elts...)
+	case *ast.ParenExpr:
+		s.exprList = append(s.exprList, neT.X)
+	case *ast.IndexExpr:
+		s.exprList = append(s.exprList, neT.X)
+		s.exprList = append(s.exprList, neT.Index)
+	case *ast.SliceExpr:
+		s.exprList = append(s.exprList, neT.X)
+		s.exprList = append(s.exprList, neT.Low)
+		s.exprList = append(s.exprList, neT.High)
+		s.exprList = append(s.exprList, neT.Max)
+	case *ast.TypeAssertExpr:
+		s.exprList = append(s.exprList, neT.X)
+		s.exprList = append(s.exprList, neT.Type)
+	case *ast.CallExpr:
+		s.exprList = append(s.exprList, neT.Fun)
+		s.exprList = append(s.exprList, neT.Args...)
+	case *ast.StarExpr:
+		s.exprList = append(s.exprList, neT.X)
+	case *ast.UnaryExpr:
+		s.exprList = append(s.exprList, neT.X)
+	case *ast.BinaryExpr:
+		s.exprList = append(s.exprList, neT.X)
+		s.exprList = append(s.exprList, neT.Y)
+	case *ast.KeyValueExpr:
+		s.exprList = append(s.exprList, neT.Key)
+		s.exprList = append(s.exprList, neT.Value)
+	case *ast.ArrayType:
+		s.exprList = append(s.exprList, neT.Len) // Not necessary
+		s.exprList = append(s.exprList, neT.Elt)
+	case *ast.StructType:
+		s.appendFieldList(neT.Fields)
+	case *ast.FuncType:
+		s.appendFieldList(neT.Params)
+		s.appendFieldList(neT.Results)
+	case *ast.InterfaceType:
+		s.appendFieldList(neT.Methods)
+	case *ast.MapType:
+		s.exprList = append(s.exprList, neT.Key)
+		s.exprList = append(s.exprList, neT.Value)
+	case *ast.ChanType:
+		s.exprList = append(s.exprList, neT.Value)
+	}
+	return s.NextSelector()
+}
+
+func (s *selectorWalker) processSpecList() (ast.SelectorExpr, error) {
+	nextSpec := s.specList[0]
+	s.specList = s.specList[1:]
+
+	switch nsT := nextSpec.(type) {
+	case *ast.ValueSpec:
+		for i, name := range nsT.Names {
+			if s.idf.checkIdent(name.Name) {
+				s.exprList = append(s.exprList, nsT.Type)
+				if len(nsT.Values) > i {
+					s.exprList = append(s.exprList, nsT.Values[i])
+				}
+			}
+		}
+
+	case *ast.TypeSpec:
+		if s.idf.checkIdent(nsT.Name.Name) {
+			s.exprList = append(s.exprList, nsT.Type)
+		}
+
+	default:
+		return ast.SelectorExpr{}, errors.New("Unexpected spec.")
+
+	}
+
+	return s.NextSelector()
+}
+
+func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
+	nextDecl := s.declList[0]
+	s.declList = s.declList[1:]
+
+	switch ndT := nextDecl.(type) {
+	case *ast.BadDecl:
+		return ast.SelectorExpr{}, errors.New("Bad Decl Found")
+	case *ast.GenDecl:
+		// We don't bother with imports.
+		if ndT.Tok == token.IMPORT {
+			return s.NextSelector()
+		}
+		s.specList = ndT.Specs
+		return s.NextSelector()
+
+	case *ast.FuncDecl:
+		s.exprList = []ast.Expr{ndT.Type}
+		return s.NextSelector()
+
+	default:
+		return ast.SelectorExpr{}, errors.New("Unexpected type of decl")
+	}
+
 }
 
 // Add all importPaths from file to packageNames.
+
+/*
 func allRelevantImports(file *ast.File, packageNames map[string]struct{}) {
 	for _, imp := range file.Imports {
 		path := strings.Trim(imp.Path.Value, "\"")
@@ -254,3 +529,4 @@ func processCallExpr(ce *ast.CallExpr, packageNames map[string]struct{}) {
 		processExpr(arg, packageNames)
 	}
 }
+*/
