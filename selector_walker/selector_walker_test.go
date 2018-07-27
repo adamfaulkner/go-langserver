@@ -56,6 +56,52 @@ func TestSelectorWalker(t *testing.T) {
 		pkg := selector.X.(*ast.Ident).Name
 		assert.Equal(t, pkg, "unicode")
 	}
-	selector, err = walker.NextSelector()
+	_, err = walker.NextSelector()
 	assert.Error(t, err)
+	assert.Equal(t, err, selectorWalkerFinished)
+
+	// Now set an ident filter and make sure it filters identifiers
+	// appropriately.
+	idFilter := identFilter{
+		identifiers: map[string]struct{}{
+			"ToLowerSpecial": struct{}{},
+		},
+	}
+
+	walker = NewSelectorWalker(f, idFilter)
+	selector, err = walker.NextSelector()
+	assert.NoError(t, err)
+
+	assert.Equal(t, selector.Sel.Name, "SpecialCase")
+	assert.IsType(t, &ast.Ident{}, selector.X)
+	pkg = selector.X.(*ast.Ident).Name
+	assert.Equal(t, pkg, "unicode")
+
+	_, err = walker.NextSelector()
+	assert.Error(t, err)
+	assert.Equal(t, err, selectorWalkerFinished)
+
+	// Make sure ident filter works with receivery functions.
+	// If this works correctly, we should find io.Writer.
+	file = filepath.Join(dir, "reader.go")
+	f, err = parser.ParseFile(fset, file, nil, 0)
+	assert.NoError(t, err)
+	idFilter = identFilter{
+		identifiers: map[string]struct{}{
+			"Reader": struct{}{},
+		},
+	}
+
+	walker = NewSelectorWalker(f, idFilter)
+	selector, err = walker.NextSelector()
+	assert.NoError(t, err)
+
+	assert.Equal(t, selector.Sel.Name, "Writer")
+	assert.IsType(t, &ast.Ident{}, selector.X)
+	pkg = selector.X.(*ast.Ident).Name
+	assert.Equal(t, pkg, "io")
+
+	_, err = walker.NextSelector()
+	assert.Error(t, err)
+	assert.Equal(t, err, selectorWalkerFinished)
 }

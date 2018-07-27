@@ -4,6 +4,7 @@ import (
 	"errors"
 	"go/ast"
 	"go/token"
+	"log"
 )
 
 type identFilter struct {
@@ -17,6 +18,51 @@ func (i *identFilter) checkIdent(ident string) bool {
 	}
 	_, ok := i.identifiers[ident]
 	return ok
+}
+
+// A function declaration will match a identFilter if the the type is T or *T
+// and T is in the set of identifiers.
+//
+// According to the go spec, the receiver type must be of the form T or *T
+// where T is a type name.
+func (i *identFilter) checkRecv(recv *ast.FieldList) bool {
+	if i.all {
+		return true
+	}
+
+	if recv.NumFields() != 1 {
+		panic("Invalid receiver list, wrong length")
+	}
+
+	typeExpr := recv.List[0].Type
+	var typeName string
+	switch typeExprT := typeExpr.(type) {
+	case *ast.Ident:
+		typeName = typeExprT.Name
+	case *ast.StarExpr:
+		inner, ok := typeExprT.X.(*ast.Ident)
+		if !ok {
+			panic("Invalid recv, wrong type of type")
+		}
+		typeName = inner.Name
+	default:
+		panic("Invalid recv, wrong type of type")
+	}
+
+	log.Printf("%+v", typeName)
+
+	_, ok := i.identifiers[typeName]
+	return ok
+}
+
+// FuncDecls match if they are a normal function and the name is in the
+// identfilter, or if they're a method and the type is in the identfilter.
+func (i *identFilter) checkFuncDecl(fd *ast.FuncDecl) bool {
+	if fd.Recv != nil {
+		return i.checkRecv(fd.Recv)
+	} else {
+		return i.checkIdent(fd.Name.String())
+	}
 }
 
 type selectorWalker struct {
@@ -180,7 +226,9 @@ func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
 		return s.NextSelector()
 
 	case *ast.FuncDecl:
-		s.exprList = []ast.Expr{ndT.Type}
+		if s.idf.checkFuncDecl(ndT) {
+			s.exprList = []ast.Expr{ndT.Type}
+		}
 		return s.NextSelector()
 
 	default:
