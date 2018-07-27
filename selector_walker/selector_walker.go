@@ -4,7 +4,6 @@ import (
 	"errors"
 	"go/ast"
 	"go/token"
-	"log"
 )
 
 type identFilter struct {
@@ -49,8 +48,6 @@ func (i *identFilter) checkRecv(recv *ast.FieldList) bool {
 		panic("Invalid recv, wrong type of type")
 	}
 
-	log.Printf("%+v", typeName)
-
 	_, ok := i.identifiers[typeName]
 	return ok
 }
@@ -65,6 +62,10 @@ func (i *identFilter) checkFuncDecl(fd *ast.FuncDecl) bool {
 	}
 }
 
+// SelectorWalker offers a way to iterate over the selectors in top level
+// declarations in a file. Note that in a top level declaration, the only valid
+// selector is a qualified identifier (the go spec separates these from
+// Selectors, but the ast package treats them the same way.)
 type selectorWalker struct {
 	// Contains the list of remaining decls to look at. These still need to be filtered with identFilter.
 	declList []ast.Decl
