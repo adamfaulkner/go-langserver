@@ -24,8 +24,8 @@ func TestSelectorWalker(t *testing.T) {
 	f, err := parser.ParseFile(fset, file, nil, 0)
 	assert.NoError(t, err)
 
-	allIdents := identFilter{
-		all: true,
+	allIdents := IdentFilter{
+		All: true,
 	}
 
 	walker := NewSelectorWalker(f, allIdents)
@@ -62,8 +62,8 @@ func TestSelectorWalker(t *testing.T) {
 
 	// Now set an ident filter and make sure it filters identifiers
 	// appropriately.
-	idFilter := identFilter{
-		identifiers: map[string]struct{}{
+	idFilter := IdentFilter{
+		Identifiers: map[string]struct{}{
 			"ToLowerSpecial": struct{}{},
 		},
 	}
@@ -86,8 +86,8 @@ func TestSelectorWalker(t *testing.T) {
 	file = filepath.Join(dir, "reader.go")
 	f, err = parser.ParseFile(fset, file, nil, 0)
 	assert.NoError(t, err)
-	idFilter = identFilter{
-		identifiers: map[string]struct{}{
+	idFilter = IdentFilter{
+		Identifiers: map[string]struct{}{
 			"Reader": struct{}{},
 		},
 	}

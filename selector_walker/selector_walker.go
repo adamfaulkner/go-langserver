@@ -6,16 +6,16 @@ import (
 	"go/token"
 )
 
-type identFilter struct {
-	all         bool
-	identifiers map[string]struct{}
+type IdentFilter struct {
+	All         bool
+	Identifiers map[string]struct{}
 }
 
-func (i *identFilter) checkIdent(ident string) bool {
-	if i.all {
+func (i *IdentFilter) checkIdent(ident string) bool {
+	if i.All {
 		return true
 	}
-	_, ok := i.identifiers[ident]
+	_, ok := i.Identifiers[ident]
 	return ok
 }
 
@@ -24,8 +24,8 @@ func (i *identFilter) checkIdent(ident string) bool {
 //
 // According to the go spec, the receiver type must be of the form T or *T
 // where T is a type name.
-func (i *identFilter) checkRecv(recv *ast.FieldList) bool {
-	if i.all {
+func (i *IdentFilter) checkRecv(recv *ast.FieldList) bool {
+	if i.All {
 		return true
 	}
 
@@ -48,13 +48,13 @@ func (i *identFilter) checkRecv(recv *ast.FieldList) bool {
 		panic("Invalid recv, wrong type of type")
 	}
 
-	_, ok := i.identifiers[typeName]
+	_, ok := i.Identifiers[typeName]
 	return ok
 }
 
 // FuncDecls match if they are a normal function and the name is in the
 // identfilter, or if they're a method and the type is in the identfilter.
-func (i *identFilter) checkFuncDecl(fd *ast.FuncDecl) bool {
+func (i *IdentFilter) CheckFuncDecl(fd *ast.FuncDecl) bool {
 	if fd.Recv != nil {
 		return i.checkRecv(fd.Recv)
 	} else {
@@ -74,10 +74,10 @@ type selectorWalker struct {
 	// Contains the list of reminaing exprs to look at. These do not need to be filtered with identFilter by their nature.
 	exprList []ast.Expr
 	// Contains a filter to use for identifiers.
-	idf identFilter
+	idf IdentFilter
 }
 
-func NewSelectorWalker(f *ast.File, idf identFilter) *selectorWalker {
+func NewSelectorWalker(f *ast.File, idf IdentFilter) *selectorWalker {
 	return &selectorWalker{
 		declList: f.Decls,
 		idf:      idf,
@@ -227,7 +227,7 @@ func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
 		return s.NextSelector()
 
 	case *ast.FuncDecl:
-		if s.idf.checkFuncDecl(ndT) {
+		if s.idf.CheckFuncDecl(ndT) {
 			s.exprList = []ast.Expr{ndT.Type}
 		}
 		return s.NextSelector()
