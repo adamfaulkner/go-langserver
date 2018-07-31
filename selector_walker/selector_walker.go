@@ -1,4 +1,4 @@
-package gotype
+package selector_walker
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ type IdentFilter struct {
 	Identifiers map[string]struct{}
 }
 
-func (i *IdentFilter) checkIdent(ident string) bool {
+func (i *IdentFilter) CheckIdent(ident string) bool {
 	if i.All {
 		return true
 	}
@@ -58,7 +58,7 @@ func (i *IdentFilter) CheckFuncDecl(fd *ast.FuncDecl) bool {
 	if fd.Recv != nil {
 		return i.checkRecv(fd.Recv)
 	} else {
-		return i.checkIdent(fd.Name.String())
+		return i.CheckIdent(fd.Name.String())
 	}
 }
 
@@ -85,7 +85,7 @@ func NewSelectorWalker(f *ast.File, idf IdentFilter) *selectorWalker {
 
 }
 
-var selectorWalkerFinished = errors.New("Finished walking")
+var SelectorWalkerFinished = errors.New("Finished walking")
 
 func (s *selectorWalker) NextSelector() (ast.SelectorExpr, error) {
 	if len(s.exprList) > 0 {
@@ -100,7 +100,7 @@ func (s *selectorWalker) NextSelector() (ast.SelectorExpr, error) {
 		return s.processDeclList()
 	}
 
-	return ast.SelectorExpr{}, selectorWalkerFinished
+	return ast.SelectorExpr{}, SelectorWalkerFinished
 }
 
 // Append types to exprList from a field list.
@@ -190,7 +190,7 @@ func (s *selectorWalker) processSpecList() (ast.SelectorExpr, error) {
 	switch nsT := nextSpec.(type) {
 	case *ast.ValueSpec:
 		for i, name := range nsT.Names {
-			if s.idf.checkIdent(name.Name) {
+			if s.idf.CheckIdent(name.Name) {
 				s.exprList = append(s.exprList, nsT.Type)
 				if len(nsT.Values) > i {
 					s.exprList = append(s.exprList, nsT.Values[i])
@@ -199,7 +199,7 @@ func (s *selectorWalker) processSpecList() (ast.SelectorExpr, error) {
 		}
 
 	case *ast.TypeSpec:
-		if s.idf.checkIdent(nsT.Name.Name) {
+		if s.idf.CheckIdent(nsT.Name.Name) {
 			s.exprList = append(s.exprList, nsT.Type)
 		}
 

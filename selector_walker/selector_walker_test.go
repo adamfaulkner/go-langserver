@@ -1,4 +1,4 @@
-package gotype
+package selector_walker
 
 import (
 	"go/ast"
@@ -58,7 +58,7 @@ func TestSelectorWalker(t *testing.T) {
 	}
 	_, err = walker.NextSelector()
 	assert.Error(t, err)
-	assert.Equal(t, err, selectorWalkerFinished)
+	assert.Equal(t, err, SelectorWalkerFinished)
 
 	// Now set an ident filter and make sure it filters identifiers
 	// appropriately.
@@ -79,7 +79,7 @@ func TestSelectorWalker(t *testing.T) {
 
 	_, err = walker.NextSelector()
 	assert.Error(t, err)
-	assert.Equal(t, err, selectorWalkerFinished)
+	assert.Equal(t, err, SelectorWalkerFinished)
 
 	// Make sure ident filter works with receivery functions.
 	// If this works correctly, we should find io.Writer.
@@ -103,5 +103,5 @@ func TestSelectorWalker(t *testing.T) {
 
 	_, err = walker.NextSelector()
 	assert.Error(t, err)
-	assert.Equal(t, err, selectorWalkerFinished)
+	assert.Equal(t, err, SelectorWalkerFinished)
 }

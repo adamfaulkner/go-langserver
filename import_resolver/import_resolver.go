@@ -11,7 +11,7 @@ type findCacheKey struct {
 	importPath string
 }
 
-type importResolver struct {
+type ImportResolver struct {
 	bctx *build.Context
 
 	// pkgCache maps package source directory to complete build package. This
@@ -23,8 +23,8 @@ type importResolver struct {
 	findCache map[findCacheKey]string
 }
 
-func NewImportResolver(bctx *build.Context) *importResolver {
-	return &importResolver{
+func NewImportResolver(bctx *build.Context) *ImportResolver {
+	return &ImportResolver{
 		bctx:      bctx,
 		pkgCache:  map[string]*build.Package{},
 		findCache: map[findCacheKey]string{},
@@ -38,7 +38,7 @@ func trimLit(b *ast.BasicLit) string {
 // TODO: Probably have to handle test stuff here.
 
 // Given a file, resolve returns the name -> package source dir mapping for all imports.
-func (i *importResolver) Resolve(f *ast.File, sourceDir string) (map[string]string, error) {
+func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]string, error) {
 	result := make(map[string]string, len(f.Imports))
 
 	for _, imp := range f.Imports {
@@ -69,7 +69,7 @@ func (i *importResolver) Resolve(f *ast.File, sourceDir string) (map[string]stri
 	return result, nil
 }
 
-func (i *importResolver) getPackagePath(importPath string, srcDir string) (string, error) {
+func (i *ImportResolver) getPackagePath(importPath string, srcDir string) (string, error) {
 	fck := findCacheKey{
 		importDir:  srcDir,
 		importPath: importPath,
@@ -89,7 +89,7 @@ func (i *importResolver) getPackagePath(importPath string, srcDir string) (strin
 	return pkg.Dir, nil
 }
 
-func (i *importResolver) getPackage(pkgDir string) (*build.Package, error) {
+func (i *ImportResolver) getPackage(pkgDir string) (*build.Package, error) {
 	pkg, ok := i.pkgCache[pkgDir]
 	if ok {
 		return pkg, nil
