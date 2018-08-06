@@ -35,11 +35,20 @@ func trimLit(b *ast.BasicLit) string {
 	return strings.Trim(b.Value, "\"")
 }
 
+type Import struct {
+	// The package name that is being imported.
+	Name string
+	// The source directory
+	SrcDir string
+	// The path that it was imported with.
+	ImpPath string
+}
+
 // TODO: Probably have to handle test stuff here.
 
 // Given a file, resolve returns the name -> package source dir mapping for all imports.
-func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]string, error) {
-	result := make(map[string]string, len(f.Imports))
+func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]Import, error) {
+	result := make(map[string]Import, len(f.Imports))
 
 	for _, imp := range f.Imports {
 		if imp.Name != nil {
@@ -49,7 +58,11 @@ func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]stri
 				return nil, err
 			}
 
-			result[imp.Name.String()] = packageDir
+			result[imp.Name.String()] = Import{
+				Name:    imp.Name.String(),
+				SrcDir:  packageDir,
+				ImpPath: trimLit(imp.Path),
+			}
 		} else {
 			// No name, must load the package to get it.
 			// We load package this janky way in order to populate the relevant
@@ -63,7 +76,11 @@ func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]stri
 			if err != nil {
 				return nil, err
 			}
-			result[pkg.Name] = packageDir
+			result[pkg.Name] = Import{
+				Name:    pkg.Name,
+				SrcDir:  packageDir,
+				ImpPath: trimLit(imp.Path),
+			}
 		}
 	}
 	return result, nil

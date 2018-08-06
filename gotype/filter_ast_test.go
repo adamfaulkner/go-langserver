@@ -1,15 +1,6 @@
 package gotype
 
-import (
-	"go/build"
-	"go/parser"
-	"go/token"
-	"path/filepath"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-)
-
+/*
 func TestSelectorWalker(t *testing.T) {
 	// Import a package so we have something to work with.
 	bctx := build.Default
@@ -31,3 +22,4 @@ func TestSelectorWalker(t *testing.T) {
 	assert.Equal(t, selector.Sel.Name, "io")
 
 }
+*/

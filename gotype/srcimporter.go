@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/adamfaulkner/go-langserver/selector_walker"
 )
 
 // An Importer provides the context for importing packages from source code.
@@ -26,21 +28,14 @@ type Importer struct {
 	sizes    types.Sizes
 	packages map[string]*types.Package
 
-	// The set of relevant packages for typechecking. This should include
-	// everything that has been part of a top level identifier's type, but
-	// nothing that was only included in a function body. For example, if a
-	// function returns "time.Time", "time" should be included in this set. If
-	// function calls time.Now internally, it should not necessarily be
-	// included in this set if IgnoreFuncBodies is set.
-	//
-	// Now, because of the interfaces we have, if we try to check something
-	// that's not in this set when IgnoreFuncBodies is set, we return an empty
-	// package.
-	relevantPkgs map[string]struct{}
-
-	buildPkgCache *sync.Map
-
 	ctx context.Context
+
+	// These should come from the result of a FilterComputation
+
+	// Map from package directory to import paths that should be considered.
+	importFilters map[string]map[string]struct{}
+	// identFilters maps package directory to IdentFilter.
+	identFilters map[string]selector_walker.IdentFilter
 }
 
 // NewImporter returns a new Importer for the given context, file set, and map
@@ -54,10 +49,9 @@ func NewSourceImporter(ctx context.Context, ctxt *build.Context, fset *token.Fil
 		ctxt: ctxt,
 		fset: fset,
 		// Changed to work in go 1.8.
-		sizes:         &types.StdSizes{8, 8},
-		packages:      packages,
-		ctx:           ctx,
-		buildPkgCache: &sync.Map{},
+		sizes:    &types.StdSizes{8, 8},
+		packages: packages,
+		ctx:      ctx,
 	}
 }
 
@@ -102,35 +96,22 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	var bp *build.Package
 	var err error
 
-	cacheKey := pkgCacheKey{
-		importPath: path,
-		currentDir: srcDir,
-	}
-	var foundInCache bool
-	var bpI interface{}
-	bpI, foundInCache = p.buildPkgCache.Load(cacheKey)
-	if foundInCache {
-		bp = bpI.(*build.Package)
-	}
-
-	if !foundInCache {
-		switch {
-		default:
-			if abs, err := p.absPath(srcDir); err == nil { // see issue #14282
-				srcDir = abs
-			}
-			bp, err = p.ctxt.Import(path, srcDir, build.FindOnly)
-
-		case build.IsLocalImport(path):
-			// "./x" -> "srcDir/x"
-			bp, err = p.ctxt.ImportDir(filepath.Join(srcDir, path), build.FindOnly)
-
-		case p.isAbsPath(path):
-			return nil, fmt.Errorf("invalid absolute import path %q", path)
+	switch {
+	default:
+		if abs, err := p.absPath(srcDir); err == nil { // see issue #14282
+			srcDir = abs
 		}
-		if err != nil {
-			return nil, err // err may be *build.NoGoError - return as is
-		}
+		bp, err = p.ctxt.Import(path, srcDir, build.FindOnly)
+
+	case build.IsLocalImport(path):
+		// "./x" -> "srcDir/x"
+		bp, err = p.ctxt.ImportDir(filepath.Join(srcDir, path), build.FindOnly)
+
+	case p.isAbsPath(path):
+		return nil, fmt.Errorf("invalid absolute import path %q", path)
+	}
+	if err != nil {
+		return nil, err // err may be *build.NoGoError - return as is
 	}
 
 	// package unsafe is known to the type checker
@@ -169,13 +150,10 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 		}
 	}()
 
-	if !foundInCache {
-		// collect package files
-		bp, err = p.ctxt.ImportDir(bp.Dir, 0)
-		if err != nil {
-			return nil, err // err may be *build.NoGoError - return as is
-		}
-		p.buildPkgCache.Store(cacheKey, bp)
+	// collect package files
+	bp, err = p.ctxt.ImportDir(bp.Dir, 0)
+	if err != nil {
+		return nil, err // err may be *build.NoGoError - return as is
 	}
 
 	var filenames []string
@@ -185,28 +163,6 @@ func (p *Importer) ImportFrom(path, srcDir string, mode types.ImportMode) (*type
 	files, err := p.parseFiles(bp.Dir, filenames)
 	if err != nil {
 		return nil, err
-	}
-
-	importsPerFile := make([][]string, len(files))
-	errorPerFile := make([]error, len(files))
-
-	detectWG := sync.WaitGroup{}
-	detectWG.Add(len(files))
-	for i, file := range files {
-		go func(file *ast.File) {
-			importsPerFile[i], errorPerFile[i] = detectTopLevelRelevantImports(file, p.ctxt, bp.Dir, p.buildPkgCache)
-			detectWG.Done()
-		}(file)
-
-	}
-	detectWG.Wait()
-	for i, paths := range importsPerFile {
-		if errorPerFile[i] != nil {
-			return nil, err
-		}
-		for _, path := range paths {
-			p.relevantPkgs[path] = struct{}{}
-		}
 	}
 
 	// type-check package files
@@ -250,6 +206,9 @@ func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, erro
 	files := make([]*ast.File, len(filenames))
 	errors := make([]error, len(filenames))
 
+	importFilter := p.importFilters[dir]
+	identFilter := p.identFilters[dir]
+
 	var wg sync.WaitGroup
 	wg.Add(len(filenames))
 	for i, filename := range filenames {
@@ -262,6 +221,7 @@ func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, erro
 					return
 				}
 				files[i], errors[i] = parser.ParseFile(p.fset, filepath, src, 0)
+				stripAstFile(files[i], importFilter, identFilter)
 				src.Close() // ignore Close error - parsing may have succeeded which is all we need
 			} else {
 				// Special-case when ctxt doesn't provide a custom OpenFile and use the
@@ -270,6 +230,7 @@ func (p *Importer) parseFiles(dir string, filenames []string) ([]*ast.File, erro
 				// both cases.
 				// TODO(gri) investigate performance difference (issue #19281)
 				files[i], errors[i] = parser.ParseFile(p.fset, filepath, nil, 0)
+				stripAstFile(files[i], importFilter, identFilter)
 			}
 		}(i, p.joinPath(dir, filename))
 	}
@@ -305,4 +266,75 @@ func (p *Importer) joinPath(elem ...string) string {
 		return f(elem...)
 	}
 	return filepath.Join(elem...)
+}
+
+// Destructively modify an *ast.File to only include the imports in
+// importFilters and the identifiers in identFilter.
+func stripAstFile(
+	f *ast.File,
+	importFilters map[string]struct{},
+	identFilter selector_walker.IdentFilter) {
+
+	// Remove all decls that aren't relevant.
+	d := 0
+	for _, decl := range f.Decls {
+		switch dT := decl.(type) {
+		case *ast.FuncDecl:
+			if identFilter.CheckFuncDecl(dT) {
+				f.Decls[d] = decl
+				d++
+			}
+
+		case *ast.GenDecl:
+			stripGenDecl(dT, identFilter)
+			// Empty gendlcs cannot go into the file.
+			if len(dT.Specs) > 0 {
+				f.Decls[d] = dT
+				d++
+			}
+		}
+	}
+	f.Decls = f.Decls[:d]
+
+	// Remove all irrelevant imports.
+	d = 0
+	for _, imp := range f.Imports {
+		p := strings.Trim(imp.Path.Value, "\"")
+		if _, ok := importFilters[p]; ok {
+			f.Imports[d] = imp
+			d++
+		}
+	}
+	f.Imports = f.Imports[:d]
+}
+
+func stripGenDecl(gd *ast.GenDecl, identFilter selector_walker.IdentFilter) {
+	d := 0
+	for _, spec := range gd.Specs {
+		switch sT := spec.(type) {
+		case *ast.ImportSpec:
+			// Ignore for now.
+			gd.Specs[d] = spec
+			d++
+		case *ast.ValueSpec:
+			// If any name matches, include.
+			use := false
+			for _, name := range sT.Names {
+				if identFilter.CheckIdent(name.String()) {
+					use = true
+					break
+				}
+			}
+			if use {
+				gd.Specs[d] = spec
+				d++
+			}
+		case *ast.TypeSpec:
+			if identFilter.CheckIdent(sT.Name.String()) {
+				gd.Specs[d] = spec
+				d++
+			}
+		}
+	}
+	gd.Specs = gd.Specs[:d]
 }

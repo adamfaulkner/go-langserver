@@ -17,10 +17,17 @@ import (
 // A FilterComputation is a traversal of an import graph to find the set of
 // identifiers that we care about.
 type FilterComputation struct {
-	// importFilters maps package directory to IdentFilter.
-	importFilters map[string]selector_walker.IdentFilter
+	// identFilters maps package directory to IdentFilter.
+	IdentFilters map[string]selector_walker.IdentFilter
+
+	// importFilters maps package directory to set of import paths to
+	// perserve.
+	ImportFilters map[string]map[string]struct{}
+
 	// nextPackages is the set of packages directories that remain to be processed.
 	nextPackages map[string]struct{}
+
+	parseCache *sync.Map
 
 	bctx *build.Context
 	fset *token.FileSet
@@ -38,11 +45,13 @@ func NewFilterComputation(bctx *build.Context, packageDirs []string) *FilterComp
 	}
 
 	return &FilterComputation{
-		importFilters: importF,
+		IdentFilters:  importF,
+		ImportFilters: make(map[string]map[string]struct{}),
 		nextPackages:  nextPackages,
 		bctx:          bctx,
 		fset:          token.NewFileSet(),
 		ir:            import_resolver.NewImportResolver(bctx),
+		parseCache:    &sync.Map{},
 	}
 }
 
@@ -74,7 +83,7 @@ func (f *FilterComputation) processPackageDir(pD string) error {
 		return err
 	}
 
-	idf, ok := f.importFilters[pD]
+	idf, ok := f.IdentFilters[pD]
 	if !ok {
 		return errors.New("process package before import filter added?")
 	}
@@ -90,7 +99,6 @@ func (f *FilterComputation) processPackageDir(pD string) error {
 }
 
 func (f *FilterComputation) parseFiles(dir string, filenames []string) ([]*ast.File, error) {
-	open := f.bctx.OpenFile // possibly nil
 
 	files := make([]*ast.File, len(filenames))
 	errors := make([]error, len(filenames))
@@ -98,25 +106,11 @@ func (f *FilterComputation) parseFiles(dir string, filenames []string) ([]*ast.F
 	var wg sync.WaitGroup
 	wg.Add(len(filenames))
 	for i, filename := range filenames {
-		go func(i int, filepath string) {
-			defer wg.Done()
-			if open != nil {
-				src, err := open(filepath)
-				if err != nil {
-					errors[i] = fmt.Errorf("opening package file %s failed (%v)", filepath, err)
-					return
-				}
-				files[i], errors[i] = parser.ParseFile(f.fset, filepath, src, 0)
-				src.Close() // ignore Close error - parsing may have succeeded which is all we need
-			} else {
-				// Special-case when ctxt doesn't provide a custom OpenFile and use the
-				// parser's file reading mechanism directly. This appears to be quite a
-				// bit faster than opening the file and providing an io.ReaderCloser in
-				// both cases.
-				// TODO(gri) investigate performance difference (issue #19281)
-				files[i], errors[i] = parser.ParseFile(f.fset, filepath, nil, 0)
-			}
-		}(i, filepath.Join(dir, filename))
+		path := filepath.Join(dir, filename)
+		go func(i int) {
+			files[i], errors[i] = f.parseFile(path)
+			wg.Done()
+		}(i)
 	}
 	wg.Wait()
 
@@ -130,6 +124,36 @@ func (f *FilterComputation) parseFiles(dir string, filenames []string) ([]*ast.F
 	return files, nil
 }
 
+func (f *FilterComputation) parseFile(path string) (*ast.File, error) {
+	pcFile, ok := f.parseCache.Load(path)
+	if ok {
+		return pcFile.(*ast.File), nil
+	}
+
+	open := f.bctx.OpenFile // possibly nil
+	var file *ast.File
+	var err error
+	if open != nil {
+		src, err := open(path)
+		if err != nil {
+			err = fmt.Errorf("opening package file %s failed (%v)", path, err)
+			return nil, err
+		}
+		file, err = parser.ParseFile(f.fset, path, src, 0)
+		src.Close() // ignore Close error - parsing may have succeeded which is all we need
+	} else {
+		// Special-case when ctxt doesn't provide a custom OpenFile and use the
+		// parser's file reading mechanism directly. This appears to be quite a
+		// bit faster than opening the file and providing an io.ReaderCloser in
+		// both cases.
+		// TODO(gri) investigate performance difference (issue #19281)
+		file, err = parser.ParseFile(f.fset, path, nil, 0)
+	}
+	f.parseCache.Store(path, file)
+
+	return file, err
+}
+
 func (f *FilterComputation) processFile(file *ast.File, sourceDir string, idf selector_walker.IdentFilter) error {
 	sw := selector_walker.NewSelectorWalker(file, idf)
 	importsMap, err := f.ir.Resolve(file, sourceDir)
@@ -139,7 +163,7 @@ func (f *FilterComputation) processFile(file *ast.File, sourceDir string, idf se
 
 	sexpr, err := sw.NextSelector()
 	for err == nil {
-		err = f.processSexpr(sexpr, importsMap)
+		err = f.processSexpr(sexpr, sourceDir, importsMap)
 		if err != nil {
 			return err
 		}
@@ -153,34 +177,54 @@ func (f *FilterComputation) processFile(file *ast.File, sourceDir string, idf se
 	return err
 }
 
-func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, importsMap map[string]string) error {
-	var packageName string
+// TODO(adamf): Move where it makes sense.
+// TODO(adamf): Incomplete
+func sexprToPackageIdent(sexpr ast.SelectorExpr) (string, string, error) {
 	switch xT := sexpr.X.(type) {
 	case *ast.Ident:
-		packageName = xT.String()
+		packageName := xT.String()
+		return packageName, sexpr.Sel.String(), nil
+	case *ast.SelectorExpr:
+		return sexprToPackageIdent(*xT)
 	default:
-		return fmt.Errorf("Invalid sexpr. Not an identifier. %v %t", sexpr, sexpr.X)
+		return "", "", fmt.Errorf("Invalid sexpr. Not an identifier. %v %t", sexpr, sexpr.X)
+	}
+}
+
+func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, srcDir string, importsMap map[string]import_resolver.Import) error {
+	packageName, ident, err := sexprToPackageIdent(sexpr)
+	if err != nil {
+		return err
 	}
 
-	pkgDir, ok := importsMap[packageName]
+	pkgDirI, ok := importsMap[packageName]
 	if !ok {
 		return fmt.Errorf("Unknown import: %s", packageName)
 	}
+	pkgDir := pkgDirI.SrcDir
 
-	edgeImportFilter, ok := f.importFilters[pkgDir]
+	edgeIdentFilter, ok := f.IdentFilters[pkgDir]
 	if !ok {
-		edgeImportFilter = selector_walker.IdentFilter{
+		edgeIdentFilter = selector_walker.IdentFilter{
 			All:         false,
 			Identifiers: map[string]struct{}{},
 		}
-		f.importFilters[pkgDir] = edgeImportFilter
+		f.IdentFilters[pkgDir] = edgeIdentFilter
 	}
 
-	ident := sexpr.Sel.Name
-	present := edgeImportFilter.CheckIdent(ident)
+	present := edgeIdentFilter.CheckIdent(ident)
 	if !present {
-		edgeImportFilter.Identifiers[ident] = struct{}{}
+		edgeIdentFilter.Identifiers[ident] = struct{}{}
 		f.nextPackages[pkgDir] = struct{}{}
 	}
+
+	// This import is relevant for this package. Update import filters.
+	srcImportFilters, ok := f.ImportFilters[srcDir]
+	if !ok {
+		srcImportFilters = make(map[string]struct{})
+		f.ImportFilters[srcDir] = srcImportFilters
+	}
+	srcImportFilters[pkgDirI.ImpPath] = struct{}{}
+
 	return nil
 }
