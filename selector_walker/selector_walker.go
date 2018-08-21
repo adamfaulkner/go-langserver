@@ -4,11 +4,26 @@ import (
 	"errors"
 	"go/ast"
 	"go/token"
+	"log"
 )
 
 type IdentFilter struct {
 	All         bool
 	Identifiers map[string]struct{}
+}
+
+// Add a identifier to the filter. If it is new, returns true.
+func (i *IdentFilter) Add(ident string) bool {
+	if i.All {
+		return false
+	}
+	_, ok := i.Identifiers[ident]
+	if ok {
+		return false
+	}
+
+	i.Identifiers[ident] = struct{}{}
+	return true
 }
 
 func (i *IdentFilter) CheckIdent(ident string) bool {
@@ -73,6 +88,10 @@ type selectorWalker struct {
 	specList []ast.Spec
 	// Contains the list of reminaing exprs to look at. These do not need to be filtered with identFilter by their nature.
 	exprList []ast.Expr
+
+	// Scope of the file being walked. Necessary to walk local identifiers.
+	scope *ast.Scope
+
 	// Contains a filter to use for identifiers.
 	idf IdentFilter
 }
@@ -81,6 +100,7 @@ func NewSelectorWalker(f *ast.File, idf IdentFilter) *selectorWalker {
 	return &selectorWalker{
 		declList: f.Decls,
 		idf:      idf,
+		scope:    f.Scope,
 	}
 
 }
@@ -126,7 +146,26 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 	case *ast.BadExpr:
 		return ast.SelectorExpr{}, errors.New("BadExpr!")
 	case *ast.Ident:
-		// skip
+		// If an identifiers is local, we need to add it to the ident filter
+		// (ugh) and add its decl back to the selector walker.
+		obj, isLocal := s.scope.Objects[neT.String()]
+		if isLocal {
+			n := s.idf.Add(neT.String())
+
+			// If the identifier is new to the filter, we possibly need to
+			// re-traverse the decl.
+			if n {
+
+				switch oDT := obj.Decl.(type) {
+				case ast.Decl:
+					s.declList = append(s.declList, oDT)
+				case ast.Spec:
+					s.specList = append(s.specList, oDT)
+				default:
+					log.Printf("Unknown obj %v %t", oDT, oDT)
+				}
+			}
+		}
 	case *ast.Ellipsis:
 		s.exprList = append(s.exprList, neT.Elt)
 	case *ast.BasicLit:
@@ -183,6 +222,15 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 	return s.NextSelector()
 }
 
+// This is needed in order to include iota consts.
+func isIota(expr ast.Expr) bool {
+	id, isID := expr.(*ast.Ident)
+	if !isID {
+		return false
+	}
+	return id.String() == "iota"
+}
+
 func (s *selectorWalker) processSpecList() (ast.SelectorExpr, error) {
 	nextSpec := s.specList[0]
 	s.specList = s.specList[1:]
@@ -190,7 +238,19 @@ func (s *selectorWalker) processSpecList() (ast.SelectorExpr, error) {
 	switch nsT := nextSpec.(type) {
 	case *ast.ValueSpec:
 		for i, name := range nsT.Names {
+			use := false
 			if s.idf.CheckIdent(name.Name) {
+				use = true
+			}
+
+			// HACK: iota is garbage. If there is one value and it is iota, we
+			// keep this for future unvalued specs that will be included.
+			if len(nsT.Values) == 1 && isIota(nsT.Values[0]) {
+				use = true
+				s.idf.Add(name.String())
+			}
+
+			if use {
 				s.exprList = append(s.exprList, nsT.Type)
 				if len(nsT.Values) > i {
 					s.exprList = append(s.exprList, nsT.Values[i])

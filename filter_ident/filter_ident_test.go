@@ -60,7 +60,6 @@ func TestComplicatedFilterComputation(t *testing.T) {
 
 	// Strings package from standard lib.
 	fc = NewFilterComputation(bctx, []string{
-		"/home/adamf/vm_data/repos/server/go/src/dropbox/waterfall/internal/",
 	})
 
 	err = fc.Run()

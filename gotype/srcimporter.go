@@ -325,6 +325,7 @@ func stripGenDecl(gd *ast.GenDecl, identFilter selector_walker.IdentFilter) {
 					break
 				}
 			}
+
 			if use {
 				gd.Specs[d] = spec
 				d++
