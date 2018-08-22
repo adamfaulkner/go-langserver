@@ -15,6 +15,9 @@ import (
 	"path/filepath"
 	"runtime/pprof"
 	"strings"
+
+	"github.com/adamfaulkner/go-langserver/filter_ident"
+	"github.com/adamfaulkner/go-langserver/import_resolver"
 )
 
 // If argument is of type scanner.ErrorList, return a slice of all errors.
@@ -129,7 +132,15 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		}
 	}
 
+	fc, err := computeFiltersFromBP(bp, bctx)
+	if err != nil {
+		log.Println("error computing filters", err)
+		return nil
+	}
 	imp := NewSourceImporter(ctx, bctx, fset, make(map[string]*types.Package))
+	log.Println("ident filters", fc.IdentFilters)
+	imp.identFilters = fc.IdentFilters
+	imp.importFilters = fc.ImportFilters
 
 	log.Println("Checking", importPath)
 	// if checkPkgFiles is called multiple times, set up conf only once
@@ -146,4 +157,28 @@ func CheckFile(ctx context.Context, origFilename string, bctx *build.Context) []
 		retErrs = append(retErrs, err)
 	}
 	return retErrs
+}
+
+func computeFiltersFromBP(bp *build.Package, bctx *build.Context) (*filter_ident.FilterComputation, error) {
+	dirList := []string{bp.Dir}
+	ir := import_resolver.NewImportResolver(bctx)
+
+	for _, imp := range bp.Imports {
+		impDir, err := ir.GetPackagePath(imp, bp.Dir)
+		if err != nil {
+			return nil, err
+		}
+		dirList = append(dirList, impDir)
+	}
+
+	fc := filter_ident.NewFilterComputation(
+		&build.Default,
+		dirList)
+
+	err := fc.Run()
+	if err != nil {
+		return nil, err
+	}
+	log.Println("dirList:", dirList)
+	return fc, nil
 }

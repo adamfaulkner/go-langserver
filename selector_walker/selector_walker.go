@@ -148,22 +148,20 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 	case *ast.Ident:
 		// If an identifiers is local, we need to add it to the ident filter
 		// (ugh) and add its decl back to the selector walker.
+
+		n := s.idf.Add(neT.String())
 		obj, isLocal := s.scope.Objects[neT.String()]
-		if isLocal {
-			n := s.idf.Add(neT.String())
+		// If the identifier is new to the filter, we possibly need to
+		// re-traverse the decl.
+		if isLocal && n {
 
-			// If the identifier is new to the filter, we possibly need to
-			// re-traverse the decl.
-			if n {
-
-				switch oDT := obj.Decl.(type) {
-				case ast.Decl:
-					s.declList = append(s.declList, oDT)
-				case ast.Spec:
-					s.specList = append(s.specList, oDT)
-				default:
-					log.Printf("Unknown obj %v %t", oDT, oDT)
-				}
+			switch oDT := obj.Decl.(type) {
+			case ast.Decl:
+				s.declList = append(s.declList, oDT)
+			case ast.Spec:
+				s.specList = append(s.specList, oDT)
+			default:
+				log.Printf("Unknown obj %v %t", oDT, oDT)
 			}
 		}
 	case *ast.Ellipsis:

@@ -53,7 +53,7 @@ func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]Impo
 	for _, imp := range f.Imports {
 		if imp.Name != nil {
 			// Super easy case - name maps to package.
-			packageDir, err := i.getPackagePath(trimLit(imp.Path), sourceDir)
+			packageDir, err := i.GetPackagePath(trimLit(imp.Path), sourceDir)
 			if err != nil {
 				return nil, err
 			}
@@ -67,7 +67,7 @@ func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]Impo
 			// No name, must load the package to get it.
 			// We load package this janky way in order to populate the relevant
 			// caches appropriately.
-			packageDir, err := i.getPackagePath(trimLit(imp.Path), sourceDir)
+			packageDir, err := i.GetPackagePath(trimLit(imp.Path), sourceDir)
 			if err != nil {
 				return nil, err
 			}
@@ -86,7 +86,7 @@ func (i *ImportResolver) Resolve(f *ast.File, sourceDir string) (map[string]Impo
 	return result, nil
 }
 
-func (i *ImportResolver) getPackagePath(importPath string, srcDir string) (string, error) {
+func (i *ImportResolver) GetPackagePath(importPath string, srcDir string) (string, error) {
 	fck := findCacheKey{
 		importDir:  srcDir,
 		importPath: importPath,
