@@ -45,7 +45,7 @@ func TestIntegration(t *testing.T) {
 
 	srcImporter := NewSourceImporter(context.Background(), &build.Default, fset, packages)
 
-	fc := filter_ident.NewFilterComputation(&build.Default, []string{"/usr/lib/go/src/strings"})
+	fc := filter_ident.NewFilterComputation(&build.Default, []string{"/usr/lib/go/src/net/http/pprof"})
 	err := fc.Run()
 	assert.NoError(t, err)
 
@@ -54,6 +54,6 @@ func TestIntegration(t *testing.T) {
 	srcImporter.identFilters = fc.IdentFilters
 	t.Log("identFilters", fc.IdentFilters)
 
-	_, err = srcImporter.Import("strings")
+	_, err = srcImporter.Import("net/http/pprof")
 	assert.NoError(t, err)
 }

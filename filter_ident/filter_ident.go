@@ -7,6 +7,7 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
+	"log"
 	"path/filepath"
 	"sync"
 
@@ -71,6 +72,31 @@ func (f *FilterComputation) Run() error {
 	return nil
 }
 
+func mergeScopes(fs []*ast.File) map[string]*ast.Object {
+	megascope := make(map[string]*ast.Object)
+	for _, f := range fs {
+		for k, v := range f.Scope.Objects {
+			megascope[k] = v
+		}
+
+	}
+	return megascope
+}
+
+func mergeImports(ir *import_resolver.ImportResolver, fs []*ast.File, sourceDir string) (map[string]import_resolver.Import, error) {
+	mergeimp := make(map[string]import_resolver.Import)
+	for _, f := range fs {
+		imports, err := ir.Resolve(f, sourceDir)
+		if err != nil {
+			return nil, err
+		}
+		for name, imp := range imports {
+			mergeimp[name] = imp
+		}
+	}
+	return mergeimp, nil
+}
+
 func (f *FilterComputation) processPackageDir(pD string) error {
 	pkg, err := f.bctx.ImportDir(pD, 0)
 	if err != nil {
@@ -88,8 +114,13 @@ func (f *FilterComputation) processPackageDir(pD string) error {
 		return errors.New("process package before import filter added?")
 	}
 
+	packageScope := mergeScopes(files)
+	packageImports, err := mergeImports(f.ir, files, pD)
+	if err != nil {
+		return err
+	}
 	for _, file := range files {
-		err = f.processFile(file, pD, idf)
+		err = f.processFile(file, pD, idf, packageScope, packageImports)
 		if err != nil {
 			return err
 		}
@@ -154,16 +185,19 @@ func (f *FilterComputation) parseFile(path string) (*ast.File, error) {
 	return file, err
 }
 
-func (f *FilterComputation) processFile(file *ast.File, sourceDir string, idf selector_walker.IdentFilter) error {
-	sw := selector_walker.NewSelectorWalker(file, idf)
-	importsMap, err := f.ir.Resolve(file, sourceDir)
-	if err != nil {
-		return err
-	}
+func (f *FilterComputation) processFile(
+	file *ast.File,
+	sourceDir string,
+	idf selector_walker.IdentFilter,
+	packageScope map[string]*ast.Object,
+	packageImports map[string]import_resolver.Import,
+) error {
+
+	sw := selector_walker.NewSelectorWalker(file, idf, packageScope)
 
 	sexpr, err := sw.NextSelector()
 	for err == nil {
-		err = f.processSexpr(sexpr, sourceDir, importsMap)
+		err = f.processSexpr(sexpr, sourceDir, packageImports)
 		if err != nil {
 			return err
 		}
@@ -187,16 +221,18 @@ func sexprToPackageIdent(sexpr ast.SelectorExpr) (string, string, error) {
 	case *ast.SelectorExpr:
 		return sexprToPackageIdent(*xT)
 	default:
-		return "", "", fmt.Errorf("Invalid sexpr. Not an identifier. %v %t", sexpr, sexpr.X)
+		return "", "", fmt.Errorf("Invalid sexpr. Not an identifier. %+v %T", sexpr, sexpr.X)
 	}
 }
 
 func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, srcDir string, importsMap map[string]import_resolver.Import) error {
 	packageName, ident, err := sexprToPackageIdent(sexpr)
 	if err != nil {
-		return err
+		// Skip it we're dumb.
+		return nil
 	}
 
+	log.Println(importsMap)
 	pkgDirI, ok := importsMap[packageName]
 	if !ok {
 		return fmt.Errorf("Unknown import: %s", packageName)
@@ -214,6 +250,10 @@ func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, srcDir string, 
 
 	present := edgeIdentFilter.CheckIdent(ident)
 	if !present {
+		if ident == "Type" {
+			log.Println("I found Type in filter ident", pkgDir)
+		}
+
 		edgeIdentFilter.Identifiers[ident] = struct{}{}
 		f.nextPackages[pkgDir] = struct{}{}
 	}

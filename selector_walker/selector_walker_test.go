@@ -28,7 +28,7 @@ func TestSelectorWalker(t *testing.T) {
 		All: true,
 	}
 
-	walker := NewSelectorWalker(f, allIdents)
+	walker := NewSelectorWalker(f, allIdents, f.Scope.Objects)
 
 	selector, err := walker.NextSelector()
 	assert.NoError(t, err)
@@ -46,7 +46,7 @@ func TestSelectorWalker(t *testing.T) {
 	file = filepath.Join(dir, "strings.go")
 	f, err = parser.ParseFile(fset, file, nil, 0)
 	assert.NoError(t, err)
-	walker = NewSelectorWalker(f, allIdents)
+	walker = NewSelectorWalker(f, allIdents, f.Scope.Objects)
 
 	for i := 0; i < 3; i++ {
 		selector, err := walker.NextSelector()
@@ -68,7 +68,7 @@ func TestSelectorWalker(t *testing.T) {
 		},
 	}
 
-	walker = NewSelectorWalker(f, idFilter)
+	walker = NewSelectorWalker(f, idFilter, f.Scope.Objects)
 	selector, err = walker.NextSelector()
 	assert.NoError(t, err)
 
@@ -92,7 +92,7 @@ func TestSelectorWalker(t *testing.T) {
 		},
 	}
 
-	walker = NewSelectorWalker(f, idFilter)
+	walker = NewSelectorWalker(f, idFilter, f.Scope.Objects)
 	selector, err = walker.NextSelector()
 	assert.NoError(t, err)
 

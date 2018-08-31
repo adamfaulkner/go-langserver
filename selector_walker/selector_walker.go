@@ -89,18 +89,18 @@ type selectorWalker struct {
 	// Contains the list of reminaing exprs to look at. These do not need to be filtered with identFilter by their nature.
 	exprList []ast.Expr
 
-	// Scope of the file being walked. Necessary to walk local identifiers.
-	scope *ast.Scope
+	// Scope of the package being walked. Necessary to walk local identifiers.
+	scope map[string]*ast.Object
 
 	// Contains a filter to use for identifiers.
 	idf IdentFilter
 }
 
-func NewSelectorWalker(f *ast.File, idf IdentFilter) *selectorWalker {
+func NewSelectorWalker(f *ast.File, idf IdentFilter, packageScope map[string]*ast.Object) *selectorWalker {
 	return &selectorWalker{
 		declList: f.Decls,
 		idf:      idf,
-		scope:    f.Scope,
+		scope:    packageScope,
 	}
 
 }
@@ -130,6 +130,12 @@ func (s *selectorWalker) appendFieldList(fl *ast.FieldList) {
 	}
 
 	for _, f := range fl.List {
+		if len(f.Names) == 1 && f.Names[0].String() == "Method" {
+			log.Println(s.declList)
+			log.Println(f.Comment.Text())
+			log.Printf("I found method %+v %T", f, f.Type)
+		}
+
 		s.exprList = append(s.exprList, f.Type)
 	}
 }
@@ -140,6 +146,9 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 
 	switch neT := nextExpr.(type) {
 	case *ast.SelectorExpr:
+		// HAX. I don't know why this is a selector walker this is stupid.
+		s.exprList = append(s.exprList, neT.X)
+
 		// Finally! Base case.
 		return *neT, nil
 
@@ -150,9 +159,10 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 		// (ugh) and add its decl back to the selector walker.
 
 		n := s.idf.Add(neT.String())
-		obj, isLocal := s.scope.Objects[neT.String()]
+		obj, isLocal := s.scope[neT.String()]
 		// If the identifier is new to the filter, we possibly need to
 		// re-traverse the decl.
+
 		if isLocal && n {
 
 			switch oDT := obj.Decl.(type) {

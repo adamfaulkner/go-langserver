@@ -14,7 +14,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"log"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -276,8 +275,6 @@ func stripAstFile(
 	importFilters map[string]struct{},
 	identFilter selector_walker.IdentFilter) {
 
-	log.Println("Stripping", f.Name.String())
-
 	// Remove all decls that aren't relevant.
 	d := 0
 	for _, decl := range f.Decls {
@@ -286,11 +283,7 @@ func stripAstFile(
 			if identFilter.CheckFuncDecl(dT) {
 				f.Decls[d] = decl
 				d++
-			} else {
-				log.Println("removing func decl", dT.Name.String())
-
 			}
-
 		case *ast.GenDecl:
 			stripGenDecl(dT, identFilter)
 			// Empty gendlcs cannot go into the file.
@@ -340,9 +333,6 @@ func stripGenDecl(gd *ast.GenDecl, identFilter selector_walker.IdentFilter) {
 			if identFilter.CheckIdent(sT.Name.String()) {
 				gd.Specs[d] = spec
 				d++
-			} else {
-
-				log.Println("REmoving", sT.Name.String())
 			}
 		}
 	}
