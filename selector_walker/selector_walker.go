@@ -125,7 +125,6 @@ func (s *selectorWalker) NextSelector() (ast.SelectorExpr, error) {
 		return s.processDeclList()
 	}
 
-	log.Println("selector walkre done")
 	return ast.SelectorExpr{}, SelectorWalkerFinished
 }
 
@@ -136,10 +135,6 @@ func (s *selectorWalker) appendFieldList(fl *ast.FieldList) {
 	}
 
 	for _, f := range fl.List {
-		e, ok := f.Type.(*ast.Ident)
-		if ok && e.String() == "name" {
-			log.Println("ugh here's name")
-		}
 
 		s.exprList = append(s.exprList, f.Type)
 	}
@@ -163,22 +158,12 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 		// If an identifiers is local, we need to add it to the ident filter
 		// (ugh) and add its decl back to the selector walker.
 
-		if neT.String() == "name" {
-			log.Println("found name")
-		}
-
 		n := s.idf.Add(neT.String())
 		obj, isLocal := s.scope[neT.String()]
 		// If the identifier is new to the filter, we possibly need to
 		// re-traverse the decl.
 
 		if isLocal && n {
-
-			if neT.String() == "rtype" {
-				log.Println("we lookin at rtype")
-				log.Printf("%+v %T", obj.Decl, obj.Decl)
-				log.Println(s.methods)
-			}
 
 			switch oDT := obj.Decl.(type) {
 			case *ast.TypeSpec:
@@ -187,7 +172,6 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 				// which has methods defined. In which case we need to re-check
 				// all that shit.
 
-				log.Println(s.methods)
 				if len(s.methods[neT.String()]) > 0 {
 					s.declList = append(s.declList, s.methods[neT.String()]...)
 				}
@@ -247,7 +231,6 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 		if neT.Results != nil {
 			s.appendFieldList(neT.Results)
 		}
-		log.Println("func type", s.exprList)
 	case *ast.InterfaceType:
 		s.appendFieldList(neT.Methods)
 	case *ast.MapType:
@@ -324,17 +307,6 @@ func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
 		return s.NextSelector()
 
 	case *ast.FuncDecl:
-		if ndT.Name.String() == "nameOff" {
-			log.Println("nameOff found", ndT.Type)
-			log.Printf("%v %T", ndT.Type, ndT.Type)
-			fd := ndT.Type
-			log.Printf("%+v %+v %+v %+v", fd.Params, fd.Results, fd.Params.List, fd.Results.List)
-			log.Printf("+%v", fd.Results.List[0].Names)
-			log.Printf("+%v", fd.Results.List[0].Type)
-			log.Printf("+%T", fd.Results.List[0].Type)
-			log.Printf("+%v", fd.Results.List[0].Type.(*ast.Ident).String())
-			log.Println("s.idf.CheckFuncDecl", s.idf.CheckFuncDecl(ndT))
-		}
 		if ndT.Recv != nil && len(ndT.Recv.List) == 1 {
 			switch recvT := ndT.Recv.List[0].Type.(type) {
 			case *ast.StarExpr:
@@ -350,7 +322,6 @@ func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
 			}
 
 		}
-		log.Println("methods", s.methods)
 
 		if s.idf.CheckFuncDecl(ndT) {
 			s.exprList = []ast.Expr{ndT.Type}

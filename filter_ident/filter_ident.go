@@ -7,7 +7,6 @@ import (
 	"go/build"
 	"go/parser"
 	"go/token"
-	"log"
 	"path/filepath"
 	"sync"
 
@@ -234,7 +233,6 @@ func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, srcDir string, 
 		return nil
 	}
 
-	log.Println(importsMap)
 	pkgDirI, ok := importsMap[packageName]
 	if !ok {
 		return fmt.Errorf("Unknown import: %s", packageName)
@@ -252,10 +250,6 @@ func (f *FilterComputation) processSexpr(sexpr ast.SelectorExpr, srcDir string, 
 
 	present := edgeIdentFilter.CheckIdent(ident)
 	if !present {
-		if ident == "Type" {
-			log.Println("I found Type in filter ident", pkgDir)
-		}
-
 		edgeIdentFilter.Identifiers[ident] = struct{}{}
 		f.nextPackages[pkgDir] = struct{}{}
 	}
