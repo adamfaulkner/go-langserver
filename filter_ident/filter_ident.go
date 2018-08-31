@@ -119,8 +119,9 @@ func (f *FilterComputation) processPackageDir(pD string) error {
 	if err != nil {
 		return err
 	}
+	packageMethods := make(map[string][]ast.Decl)
 	for _, file := range files {
-		err = f.processFile(file, pD, idf, packageScope, packageImports)
+		err = f.processFile(file, pD, idf, packageScope, packageImports, packageMethods)
 		if err != nil {
 			return err
 		}
@@ -191,9 +192,10 @@ func (f *FilterComputation) processFile(
 	idf selector_walker.IdentFilter,
 	packageScope map[string]*ast.Object,
 	packageImports map[string]import_resolver.Import,
+	packageMethods map[string][]ast.Decl,
 ) error {
 
-	sw := selector_walker.NewSelectorWalker(file, idf, packageScope)
+	sw := selector_walker.NewSelectorWalker(file, idf, packageScope, packageMethods)
 
 	sexpr, err := sw.NextSelector()
 	for err == nil {

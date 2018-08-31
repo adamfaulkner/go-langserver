@@ -94,13 +94,18 @@ type selectorWalker struct {
 
 	// Contains a filter to use for identifiers.
 	idf IdentFilter
+
+	// Map from type identifier to methods.
+	methods map[string][]ast.Decl
 }
 
-func NewSelectorWalker(f *ast.File, idf IdentFilter, packageScope map[string]*ast.Object) *selectorWalker {
+func NewSelectorWalker(f *ast.File, idf IdentFilter, packageScope map[string]*ast.Object, packageMethods map[string][]ast.Decl) *selectorWalker {
 	return &selectorWalker{
 		declList: f.Decls,
 		idf:      idf,
 		scope:    packageScope,
+
+		methods: packageMethods,
 	}
 
 }
@@ -120,6 +125,7 @@ func (s *selectorWalker) NextSelector() (ast.SelectorExpr, error) {
 		return s.processDeclList()
 	}
 
+	log.Println("selector walkre done")
 	return ast.SelectorExpr{}, SelectorWalkerFinished
 }
 
@@ -130,10 +136,9 @@ func (s *selectorWalker) appendFieldList(fl *ast.FieldList) {
 	}
 
 	for _, f := range fl.List {
-		if len(f.Names) == 1 && f.Names[0].String() == "Method" {
-			log.Println(s.declList)
-			log.Println(f.Comment.Text())
-			log.Printf("I found method %+v %T", f, f.Type)
+		e, ok := f.Type.(*ast.Ident)
+		if ok && e.String() == "name" {
+			log.Println("ugh here's name")
 		}
 
 		s.exprList = append(s.exprList, f.Type)
@@ -158,6 +163,10 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 		// If an identifiers is local, we need to add it to the ident filter
 		// (ugh) and add its decl back to the selector walker.
 
+		if neT.String() == "name" {
+			log.Println("found name")
+		}
+
 		n := s.idf.Add(neT.String())
 		obj, isLocal := s.scope[neT.String()]
 		// If the identifier is new to the filter, we possibly need to
@@ -165,9 +174,27 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 
 		if isLocal && n {
 
+			if neT.String() == "rtype" {
+				log.Println("we lookin at rtype")
+				log.Printf("%+v %T", obj.Decl, obj.Decl)
+				log.Println(s.methods)
+			}
+
 			switch oDT := obj.Decl.(type) {
+			case *ast.TypeSpec:
+				s.specList = append(s.specList, oDT)
+				// Urghhhh... if you're defining a type, it might be a type
+				// which has methods defined. In which case we need to re-check
+				// all that shit.
+
+				log.Println(s.methods)
+				if len(s.methods[neT.String()]) > 0 {
+					s.declList = append(s.declList, s.methods[neT.String()]...)
+				}
+
 			case ast.Decl:
 				s.declList = append(s.declList, oDT)
+
 			case ast.Spec:
 				s.specList = append(s.specList, oDT)
 			default:
@@ -215,10 +242,12 @@ func (s *selectorWalker) processExprList() (ast.SelectorExpr, error) {
 	case *ast.StructType:
 		s.appendFieldList(neT.Fields)
 	case *ast.FuncType:
+
 		s.appendFieldList(neT.Params)
 		if neT.Results != nil {
 			s.appendFieldList(neT.Results)
 		}
+		log.Println("func type", s.exprList)
 	case *ast.InterfaceType:
 		s.appendFieldList(neT.Methods)
 	case *ast.MapType:
@@ -295,6 +324,34 @@ func (s *selectorWalker) processDeclList() (ast.SelectorExpr, error) {
 		return s.NextSelector()
 
 	case *ast.FuncDecl:
+		if ndT.Name.String() == "nameOff" {
+			log.Println("nameOff found", ndT.Type)
+			log.Printf("%v %T", ndT.Type, ndT.Type)
+			fd := ndT.Type
+			log.Printf("%+v %+v %+v %+v", fd.Params, fd.Results, fd.Params.List, fd.Results.List)
+			log.Printf("+%v", fd.Results.List[0].Names)
+			log.Printf("+%v", fd.Results.List[0].Type)
+			log.Printf("+%T", fd.Results.List[0].Type)
+			log.Printf("+%v", fd.Results.List[0].Type.(*ast.Ident).String())
+			log.Println("s.idf.CheckFuncDecl", s.idf.CheckFuncDecl(ndT))
+		}
+		if ndT.Recv != nil && len(ndT.Recv.List) == 1 {
+			switch recvT := ndT.Recv.List[0].Type.(type) {
+			case *ast.StarExpr:
+				ident, ok := recvT.X.(*ast.Ident)
+				if !ok {
+					log.Println("weird not a ident?")
+				} else {
+					s.methods[ident.String()] = append(s.methods[ident.String()], ndT)
+				}
+
+			case *ast.Ident:
+				s.methods[recvT.String()] = append(s.methods[recvT.String()], ndT)
+			}
+
+		}
+		log.Println("methods", s.methods)
+
 		if s.idf.CheckFuncDecl(ndT) {
 			s.exprList = []ast.Expr{ndT.Type}
 		}
